@@ -1,0 +1,131 @@
+@model FixPal.Models.ViewModels.ProviderApplicationViewModel
+
+@{
+    ViewData["Title"] = "الانضمام كمزود خدمة";
+}
+
+@section Styles {
+    <link rel="stylesheet" href="~/css/pages/provider-application.css" asp-append-version="true" />
+}
+
+<div class="provider-apply-page">
+    <div class="container py-4 py-lg-5">
+        <div class="row g-4 g-xl-5 align-items-start">
+            <div class="col-lg-5">
+                <section class="provider-intro-card">
+                    <span class="provider-intro-kicker">
+                        <i class="bi bi-person-badge"></i>
+                        Provider onboarding
+                    </span>
+                    <h1>قدّم ملفك المهني بشكل واضح وموثوق.</h1>
+                    <p>
+                        نراجع طلبات مزودي الخدمة قبل منح صلاحية Provider. هذا يقلل الحسابات الوهمية
+                        ويمنح العميل تجربة أكثر ثقة.
+                    </p>
+
+                    <div class="provider-intro-steps">
+                        <div>
+                            <span>1</span>
+                            <p><strong>أرسل بياناتك</strong> الاسم المهني، التخصص، والمنطقة.</p>
+                        </div>
+                        <div>
+                            <span>2</span>
+                            <p><strong>مراجعة الإدارة</strong> يبقى الحساب Pending إلى حين اتخاذ القرار.</p>
+                        </div>
+                        <div>
+                            <span>3</span>
+                            <p><strong>اعتماد الصلاحية</strong> بعد القبول تضاف صلاحية Provider للحساب.</p>
+                        </div>
+                    </div>
+
+                    <div class="provider-safety-note">
+                        <i class="bi bi-shield-check"></i>
+                        <span>لا نطلب بيانات دفع أو معلومات مالية في مرحلة الانضمام.</span>
+                    </div>
+                </section>
+            </div>
+
+            <div class="col-lg-7">
+                <section class="provider-form-card">
+                    <div class="provider-form-heading">
+                        <span>طلب انضمام جديد</span>
+                        <h2>بيانات مزود الخدمة</h2>
+                        <p>اكتب المعلومات كما تريد أن تظهر لاحقًا للعملاء.</p>
+                    </div>
+
+                    <form asp-action="Apply" method="post" novalidate>
+                        <div asp-validation-summary="ModelOnly" class="alert alert-danger mb-4"></div>
+
+                        <div class="mb-3">
+                            <label asp-for="DisplayName" class="form-label"></label>
+                            <input asp-for="DisplayName"
+                                   class="form-control"
+                                   autocomplete="name"
+                                   placeholder="مثال: محمد الخطيب للصيانة" />
+                            <span asp-validation-for="DisplayName" class="text-danger field-validation"></span>
+                        </div>
+
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label asp-for="ServiceCategoryId" class="form-label"></label>
+                                <select asp-for="ServiceCategoryId"
+                                        asp-items="ViewBag.Categories"
+                                        class="form-select">
+                                    <option value="0">اختر التخصص</option>
+                                </select>
+                                <span asp-validation-for="ServiceCategoryId" class="text-danger field-validation"></span>
+                            </div>
+
+                            <div class="col-md-6">
+                                <label asp-for="AreaId" class="form-label"></label>
+                                <select asp-for="AreaId"
+                                        asp-items="ViewBag.Areas"
+                                        class="form-select">
+                                    <option value="0">اختر المنطقة</option>
+                                </select>
+                                <span asp-validation-for="AreaId" class="text-danger field-validation"></span>
+                            </div>
+                        </div>
+
+                        <div class="mt-3">
+                            <label asp-for="PhoneNumber" class="form-label"></label>
+                            <input asp-for="PhoneNumber"
+                                   class="form-control"
+                                   inputmode="tel"
+                                   autocomplete="tel"
+                                   placeholder="رقم للتواصل" />
+                            <span asp-validation-for="PhoneNumber" class="text-danger field-validation"></span>
+                        </div>
+
+                        <div class="mt-3">
+                            <div class="d-flex justify-content-between gap-2 align-items-end">
+                                <label asp-for="Description" class="form-label"></label>
+                                <small class="text-muted">حتى 500 حرف</small>
+                            </div>
+                            <textarea asp-for="Description"
+                                      class="form-control provider-description"
+                                      rows="5"
+                                      placeholder="ما خبرتك؟ وما نوع الأعمال التي تتقنها؟"></textarea>
+                            <span asp-validation-for="Description" class="text-danger field-validation"></span>
+                        </div>
+
+                        <div class="provider-form-footer">
+                            <p>
+                                <i class="bi bi-info-circle"></i>
+                                التقديم لا يمنح صلاحية مزود الخدمة تلقائيًا؛ يجب أن يعتمد الطلب من الإدارة.
+                            </p>
+                            <button type="submit" class="btn fp-btn-gold provider-submit-btn">
+                                إرسال طلب الانضمام
+                                <i class="bi bi-arrow-left"></i>
+                            </button>
+                        </div>
+                    </form>
+                </section>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

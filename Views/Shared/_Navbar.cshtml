@@ -1,0 +1,15 @@
+<header class="fp-header">
+<nav class="navbar navbar-light navbar-expand-xl fp-navbar" aria-label="التنقل الرئيسي"><div class="container">
+<a class="navbar-brand fp-brand" asp-area="" asp-controller="Home" asp-action="Index"><span class="fp-brand-mark" aria-hidden="true"><i class="bi bi-tools"></i></span><span class="fp-brand-wordmark" dir="ltr">Fix<strong>Pal</strong></span></a>
+<button class="navbar-toggler fp-navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#fixpalNavbar" aria-controls="fixpalNavbar" aria-expanded="false" aria-label="فتح أو إغلاق القائمة"><span class="navbar-toggler-icon"></span></button>
+<div class="collapse navbar-collapse" id="fixpalNavbar"><ul class="navbar-nav mx-auto mb-3 mb-xl-0 align-items-xl-center">
+<li class="nav-item"><a class="nav-link fp-nav-link" asp-area="" asp-controller="Home" asp-action="Index">الرئيسية</a></li>
+<li class="nav-item"><a class="nav-link fp-nav-link" asp-area="" asp-controller="Services" asp-action="Index">الخدمات</a></li>
+<li class="nav-item"><a class="nav-link fp-nav-link" asp-area="" asp-controller="Providers" asp-action="Index">مزودو الخدمة</a></li>
+@if (User.Identity?.IsAuthenticated == true) {
+<li class="nav-item"><a class="nav-link fp-nav-link" asp-area="" asp-controller="MaintenanceRequests" asp-action="Index">طلباتي</a></li>
+<li class="nav-item"><a class="nav-link fp-nav-link" asp-area="" asp-controller="MaintenanceRequests" asp-action="Create">إنشاء طلب</a></li>
+} else {
+<li class="nav-item"><a class="nav-link fp-nav-link" asp-area="" asp-controller="Home" asp-action="Index" asp-fragment="how-it-works">كيف يعمل FixPal</a></li>
+}
+</ul><partial name="_LoginPartial" /></div></div></nav></header>

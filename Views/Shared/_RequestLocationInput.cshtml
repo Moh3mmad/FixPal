@@ -1,0 +1,10 @@
+@model FixPal.Models.ViewModels.CreateMaintenanceRequestViewModel
+<div class="fp-location-tools mt-3">
+    <p>المدينة والمنطقة كافيتان. يمكنك إضافة نقطة خاصة لتسهيل الوصول، ثم تأكد أنها تتوافق مع المنطقة المختارة.</p>
+    <input asp-for="Latitude" type="hidden" /><input asp-for="Longitude" type="hidden" />
+    <span asp-validation-for="Latitude" class="text-danger"></span><span asp-validation-for="Longitude" class="text-danger"></span>
+    <div class="d-flex flex-wrap gap-2"><button type="button" class="btn fp-btn-ghost" id="use-location">استخدام موقعي الحالي</button><button type="button" class="btn fp-btn-ghost" id="open-map">اختيار على الخريطة</button><button type="button" class="btn fp-btn-ghost" id="clear-location">مسح النقطة</button></div>
+    <p id="location-status" class="fp-field-hint" role="status">الموقع الدقيق اختياري، ولا يظهر في دليل المزودين.</p>
+    <div id="request-map" class="fp-map" hidden aria-label="اختر نقطة على الخريطة"></div>
+    <small class="fp-field-hint">فتح الخريطة يحمّل Leaflet وخرائط OpenStreetMap من خدمات خارجية. تحديد GPS لا يفتح الخريطة تلقائيًا. عند تعذر التحميل، تابع باختيار المدينة والمنطقة.</small>
+</div>

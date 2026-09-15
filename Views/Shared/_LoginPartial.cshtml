@@ -1,0 +1,100 @@
+@using Microsoft.AspNetCore.Identity
+@using FixPal.Models
+@using FixPal.Infrastructure.Identity
+@inject SignInManager<ApplicationUser> SignInManager
+@inject UserManager<ApplicationUser> UserManager
+@inject FixPal.Data.ApplicationDbContext Db
+@using Microsoft.EntityFrameworkCore
+@using FixPal.Models.Enums
+
+@if (SignInManager.IsSignedIn(User))
+{
+    <div class="dropdown fp-account-dropdown">
+        <button class="btn fp-account-button dropdown-toggle"
+                type="button"
+                data-bs-toggle="dropdown"
+                aria-expanded="false">
+            <span class="fp-account-avatar" aria-hidden="true">
+                <i class="bi bi-person"></i>
+            </span>
+            <span class="fp-account-label text-truncate">
+                @User.Identity?.Name
+            </span>
+        </button>
+
+        <ul class="dropdown-menu dropdown-menu-start fp-account-menu shadow-sm">
+            <li class="px-3 pt-2 pb-3 border-bottom">
+                <span class="d-block fw-bold text-dark text-truncate">
+                    @User.Identity?.Name
+                </span>
+                <small class="text-muted">حساب FixPal</small>
+            </li>
+
+            @if (User.IsInRole(AppRoles.Admin))
+            {
+                <li>
+                    <a class="dropdown-item" asp-area="" asp-controller="Admin" asp-action="Index">
+                        <i class="bi bi-shield-check"></i>
+                        لوحة الإدارة
+                    </a>
+                </li>
+            }
+            @if (User.IsInRole(AppRoles.Provider) && await Db.ProviderProfiles.AsNoTracking().AnyAsync(p => p.UserId == UserManager.GetUserId(User) && p.ApprovalStatus == ApprovalStatus.Approved))
+            {
+                <li><a class="dropdown-item" asp-area="" asp-controller="ProviderRequests" asp-action="Index"><i class="bi bi-tools"></i>مساحة عمل المزود</a></li>
+                <li><a class="dropdown-item" asp-area="" asp-controller="ProviderAvailability" asp-action="Index">توفرّي للعمل</a></li>
+            }
+            @if (!User.IsInRole(AppRoles.Admin))
+            {
+                <li>
+                    <a class="dropdown-item"
+                       asp-area=""
+                       asp-controller="ProviderApplication"
+                       asp-action="Status">
+                        <i class="bi bi-person-badge"></i>
+                        حالة مزود الخدمة
+                    </a>
+                </li>
+            }
+
+            <li>
+                <a class="dropdown-item"
+                   asp-area="Identity"
+                   asp-page="/Account/Manage/Index">
+                    <i class="bi bi-gear"></i>
+                    إعدادات الحساب
+                </a>
+            </li>
+
+            <li><hr class="dropdown-divider" /></li>
+            <li>
+                <form asp-area="Identity"
+                      asp-page="/Account/Logout"
+                      asp-route-returnUrl="@Url.Action("Index", "Home", new { area = "" })"
+                      method="post">
+                    <button type="submit" class="dropdown-item text-danger">
+                        <i class="bi bi-box-arrow-right"></i>
+                        تسجيل الخروج
+                    </button>
+                </form>
+            </li>
+        </ul>
+    </div>
+}
+else
+{
+    <div class="d-flex flex-column flex-lg-row align-items-stretch align-items-lg-center gap-2">
+        <a class="btn fp-btn-ghost"
+           asp-area="Identity"
+           asp-route-returnUrl="@(Context.Request.Query["ReturnUrl"].ToString())"
+           asp-page="/Account/Login">
+            تسجيل الدخول
+        </a>
+        <a class="btn fp-btn-gold"
+           asp-area="Identity"
+           asp-route-returnUrl="@(Context.Request.Query["ReturnUrl"].ToString())"
+           asp-page="/Account/Register">
+            إنشاء حساب
+        </a>
+    </div>
+}

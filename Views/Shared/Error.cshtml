@@ -1,0 +1,13 @@
+@model ErrorViewModel
+@{ ViewData["Title"] = "تعذر إتمام العملية"; }
+<div class="container fp-workspace">
+    <section class="fp-empty">
+        <h1>تعذر إتمام العملية حاليًا.</h1>
+        <p>حاول مرة أخرى بعد قليل. إذا استمرت المشكلة، احتفظ برقم المتابعة لمساعدة الإدارة في التحقق منها.</p>
+        @if (Model.ShowRequestId)
+        {
+            <p>رقم المتابعة: <code dir="ltr">@Model.RequestId</code></p>
+        }
+        <a class="btn fp-btn-navy" asp-area="" asp-controller="Home" asp-action="Index">العودة للرئيسية</a>
+    </section>
+</div>

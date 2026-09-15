@@ -1,0 +1,16 @@
+@model FixPal.Models.ViewModels.RequestDetailsViewModel
+@using FixPal.Models.Enums
+@{ var summary = FixPal.Services.DemoPaymentCalculator.Calculate(Model.Quote, Model.Status); }
+@if (summary != null && Model.Quote is {} quote)
+{
+<section class="fp-detail-panel mt-4"><span class="fp-eyebrow">محاكاة تجريبية فقط — لا دفع حقيقي</span><h2>كيف تُحسب تكلفة الخدمة؟</h2><p class="fp-notice">هذا عرض توضيحي لنموذج FixPal. لا تُحصّل أموال أو تُحتجز ضمانات ولا تُطلب بيانات دفع.</p>
+<dl class="fp-facts"><dt>معاينة عربون افتراضي (20% من الحد الأدنى المقبول)</dt><dd>@summary.DepositPreview.ToString("0.00") شيكل — للعرض فقط</dd><dt>السعر النهائي</dt><dd>@(summary.FinalPrice?.ToString("0.00") ?? "لم يُحدد بعد")</dd></dl>
+@if (quote.FinalPrice == null && Model.CanManage && Model.Status == MaintenanceRequestStatus.InProgress)
+{ <form asp-area="" asp-controller="DemoPayments" asp-action="ProposeFinal" asp-route-id="@Model.Id" method="post"><label for="final-price" class="form-label mt-3">السعر النهائي ضمن النطاق المقبول (شيكل)</label><input id="final-price" name="finalPrice" type="number" min="@quote.MinimumPrice.ToString(System.Globalization.CultureInfo.InvariantCulture)" max="@quote.MaximumPrice.ToString(System.Globalization.CultureInfo.InvariantCulture)" step="0.01" required class="form-control" /><button class="btn fp-btn-navy mt-3">إرسال السعر للموافقة</button></form> }
+@if (quote.FinalPrice != null && quote.FinalPriceAcceptedAtUtc == null && Model.IsOwner && Model.Status == MaintenanceRequestStatus.InProgress)
+{ <form asp-area="" asp-controller="DemoPayments" asp-action="AcceptFinal" asp-route-id="@Model.Id" method="post"><button class="btn fp-btn-gold mt-3">تأكيد السعر النهائي — محاكاة فقط</button></form> }
+@if (quote.FinalPriceAcceptedAtUtc.HasValue) { <p class="fp-approved mt-3">وافق صاحب الطلب على السعر النهائي.</p> }
+@if (summary.PlatformFee.HasValue) { <dl class="fp-facts"><dt>حصة FixPal الافتراضية (5%)</dt><dd>@summary.PlatformFee.Value.ToString("0.00") شيكل</dd><dt>صافي المزود الافتراضي</dt><dd>@summary.ProviderNet!.Value.ToString("0.00") شيكل</dd></dl> }
+else { <p class="fp-field-hint">تُحسب حصة المنصة بعد اكتمال الخدمة واعتماد السعر النهائي.</p> }
+</section>
+}

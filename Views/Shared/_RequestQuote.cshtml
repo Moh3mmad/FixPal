@@ -1,0 +1,21 @@
+@model FixPal.Models.ViewModels.RequestDetailsViewModel
+@using FixPal.Models.Enums
+@if (Model.RequestType == RequestType.PrivateService)
+{
+    <section class="fp-detail-panel mt-4"><span class="fp-eyebrow">السعر بشفافية</span><h2>عرض السعر</h2>
+    @if (Model.Quote is { } quote)
+    {
+        <p class="fs-4 fw-bold">@quote.MinimumPrice.ToString("0.00") – @quote.MaximumPrice.ToString("0.00") <small>شيكل</small></p>
+        <p class="fp-description">@quote.Note</p>
+        <p class="fp-field-hint">أُرسل <time data-utc="@quote.SubmittedAtUtc.ToString("yyyy-MM-ddTHH:mm:ssZ")">@quote.SubmittedAtUtc.ToString("u")</time></p>
+        @if (quote.AcceptedAtUtc.HasValue) { <p class="fp-approved">قبله صاحب الطلب <time data-utc="@quote.AcceptedAtUtc.Value.ToString("yyyy-MM-ddTHH:mm:ssZ")">@quote.AcceptedAtUtc.Value.ToString("u")</time></p> }
+        else if (Model.IsOwner && Model.Status is not (MaintenanceRequestStatus.Completed or MaintenanceRequestStatus.Cancelled))
+        { <form asp-area="" asp-controller="RequestQuotes" asp-action="Accept" asp-route-id="@Model.Id" method="post"><p>قبول النطاق ليس عملية دفع. اتفقا على السعر النهائي قبل إنهاء الخدمة.</p><button class="btn fp-btn-gold" type="submit">قبول نطاق السعر</button></form> }
+    }
+    else if (Model.CanManage && Model.Status is not (MaintenanceRequestStatus.Completed or MaintenanceRequestStatus.Cancelled))
+    {
+        <form asp-area="" asp-controller="RequestQuotes" asp-action="Submit" asp-route-id="@Model.Id" method="post"><p class="fp-field-hint">عرض واحد محفوظ لكل طلب؛ راجع المبالغ قبل الإرسال.</p><div class="row g-3"><div class="col-md-6"><label for="quote-min" class="form-label">الحد الأدنى (شيكل)</label><input id="quote-min" name="MinimumPrice" type="number" min="0.01" max="1000000" step="0.01" required class="form-control" /></div><div class="col-md-6"><label for="quote-max" class="form-label">الحد الأعلى (شيكل)</label><input id="quote-max" name="MaximumPrice" type="number" min="0.01" max="1000000" step="0.01" required class="form-control" /></div></div><label for="quote-note" class="form-label mt-3">ملاحظة (اختياري)</label><textarea id="quote-note" name="Note" maxlength="500" rows="2" class="form-control"></textarea><button class="btn fp-btn-navy mt-3" type="submit">إرسال العرض</button></form>
+    }
+    else { <p>لم يرسل المزود عرض سعر بعد.</p> }
+    </section>
+}

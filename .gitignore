@@ -1,0 +1,17 @@
+﻿bin/
+obj/
+.vs/
+*.user
+*.suo
+*.log
+.local-*
+*.mdf
+*.ldf
+.env
+.env.*
+secrets.json
+appsettings.Local.json
+TestResults/
+coverage/
+packages/
+*.nupkg

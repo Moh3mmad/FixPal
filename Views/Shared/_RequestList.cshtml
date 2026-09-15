@@ -1,0 +1,16 @@
+@model FixPal.Models.ViewModels.PagedResult<FixPal.Models.ViewModels.RequestSummaryViewModel>
+@using FixPal.Infrastructure
+@{ var controller = ViewData["ListController"]?.ToString() ?? "MaintenanceRequests"; }
+@if (Model.Items.Count == 0)
+{
+    <section class="fp-empty"><span class="fp-empty-mark" aria-hidden="true"><i class="bi bi-clipboard"></i></span><h2>لا توجد طلبات هنا بعد.</h2><p>@(controller == "ProviderRequests" ? "ستظهر هنا الطلبات التي يختارك أصحابها لتنفيذها، حسب التصفية المحددة." : "ابدأ بطلب صيانة أو سجّل بلاغًا عن مكان عام.")</p>@if (controller == "MaintenanceRequests") { <a class="btn fp-btn-navy" asp-area="" asp-controller="MaintenanceRequests" asp-action="Create">إنشاء أول طلب</a> }</section>
+}
+else
+{
+    <div class="fp-list-heading"><span>@Model.TotalCount طلب</span><span>الأحدث أولًا</span></div>
+    <div class="fp-request-list">@foreach (var request in Model.Items)
+    {
+        <article class="fp-request-row"><div><div class="fp-request-meta"><span dir="ltr">#@request.Id</span><span>@request.Category</span><span class="fp-status @request.Status.ToString().ToLowerInvariant()">@RequestWorkflow.Label(request.Status)</span></div><h2><a asp-area="" asp-controller="@controller" asp-action="Details" asp-route-id="@request.Id">@request.Title</a></h2><p>@request.Location <span class="fp-separator">·</span> @(request.ProviderName ?? "بدون مزود معيّن")</p></div><div class="fp-row-end"><time data-utc="@request.CreatedAtUtc.ToString("yyyy-MM-ddTHH:mm:ssZ")">@request.CreatedAtUtc.ToString("yyyy/MM/dd") UTC</time><a asp-area="" asp-controller="@controller" asp-action="Details" asp-route-id="@request.Id" class="fp-text-link" aria-label="تفاصيل الطلب @request.Id">عرض التفاصيل <i class="bi bi-arrow-left" aria-hidden="true"></i></a></div></article>
+    }</div>
+}
+<nav class="fp-pagination" aria-label="صفحات الطلبات">@if (Model.Page > 1) { <a asp-area="" asp-controller="@controller" asp-action="Index" asp-route-page="@(Model.Page - 1)" asp-route-status="@ViewData["StatusFilter"]">السابق</a> }<span>صفحة @Model.Page من @Model.TotalPages</span>@if (Model.Page < Model.TotalPages) { <a asp-area="" asp-controller="@controller" asp-action="Index" asp-route-page="@(Model.Page + 1)" asp-route-status="@ViewData["StatusFilter"]">التالي</a> }</nav>

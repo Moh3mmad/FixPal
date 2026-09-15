@@ -1,0 +1,6 @@
+@model FixPal.Models.ViewModels.PublicProviderViewModel
+<p class="fp-field-hint">@FixPal.Services.ProviderAvailabilityRules.Label(Model.Availability, Model.AvailableAfterUtc)
+@if (FixPal.Services.ProviderAvailabilityRules.Effective(Model.Availability, Model.AvailableAfterUtc, DateTime.UtcNow) == FixPal.Models.Enums.ProviderAvailability.AvailableAfter && Model.AvailableAfterUtc.HasValue)
+{ <time data-utc="@Model.AvailableAfterUtc.Value.ToString("yyyy-MM-ddTHH:mm:ssZ")">@Model.AvailableAfterUtc.Value.ToString("yyyy/MM/dd HH:mm") UTC</time> }
+</p>
+<p class="fp-field-hint">@(Model.ReviewCount == 0 ? "لا توجد تقييمات بعد" : $"{Model.AverageRating:0.0} / 5 · {Model.ReviewCount} تقييم")</p>

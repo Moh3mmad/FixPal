@@ -1,0 +1,131 @@
+@model FixPal.Models.ProviderProfile
+@using FixPal.Models.Enums
+@using FixPal.Infrastructure.Identity
+
+@{
+    ViewData["Title"] = "حالة طلب مزود الخدمة";
+
+    var stateClass = Model.ApprovalStatus switch
+    {
+        ApprovalStatus.Approved => "approved",
+        ApprovalStatus.Rejected => "rejected",
+        _ => "pending"
+    };
+
+    var stateTitle = Model.ApprovalStatus switch
+    {
+        ApprovalStatus.Approved => "تم اعتماد حسابك",
+        ApprovalStatus.Rejected => "لم يتم اعتماد الطلب",
+        _ => "طلبك قيد المراجعة"
+    };
+
+    var stateDescription = Model.ApprovalStatus switch
+    {
+        ApprovalStatus.Approved => "ملفك معتمد. تظهر الطلبات المعيّنة لك في مساحة العمل بعد تحديث تسجيل دخولك.",
+        ApprovalStatus.Rejected => "لم يتم اعتماد طلب الانضمام. يمكنك الاستمرار باستخدام حسابك لطلب خدمات الصيانة.",
+        _ => "استلمنا بياناتك. سنعرض نتيجة مراجعة الإدارة هنا. يمكنك استخدام حسابك لطلب الصيانة أثناء الانتظار."
+    };
+}
+
+@section Styles {
+    <link rel="stylesheet" href="~/css/pages/provider-application.css" asp-append-version="true" />
+}
+
+<div class="provider-status-page">
+    <div class="container py-5">
+        <div class="row justify-content-center">
+            <div class="col-lg-8 col-xl-7">
+                @if (TempData["SuccessMessage"] != null)
+                {
+                    <div class="alert alert-success status-flash">
+                        <i class="bi bi-check-circle-fill"></i>
+                        @TempData["SuccessMessage"]
+                    </div>
+                }
+
+                <section class="provider-status-card @stateClass">
+                    <div class="status-icon" aria-hidden="true">
+                        @if (Model.ApprovalStatus == ApprovalStatus.Approved)
+                        {
+                            <i class="bi bi-patch-check-fill"></i>
+                        }
+                        else if (Model.ApprovalStatus == ApprovalStatus.Rejected)
+                        {
+                            <i class="bi bi-x-circle-fill"></i>
+                        }
+                        else
+                        {
+                            <i class="bi bi-hourglass-split"></i>
+                        }
+                    </div>
+
+                    <span class="status-overline">Provider application</span>
+                    <h1>@stateTitle</h1>
+                    <p class="status-lead">@stateDescription</p>
+
+                    <div class="status-progress" aria-label="مراحل طلب الانضمام">
+                        <div class="status-step done">
+                            <span><i class="bi bi-check2"></i></span>
+                            <strong>تم الإرسال</strong>
+                        </div>
+                        <div class="status-progress-line @(Model.ApprovalStatus != ApprovalStatus.Pending ? "done" : "")"></div>
+                        <div class="status-step @(Model.ApprovalStatus != ApprovalStatus.Pending ? "done" : "current")">
+                            <span>
+                                @if (Model.ApprovalStatus == ApprovalStatus.Pending)
+                                {
+                                    <i class="bi bi-three-dots"></i>
+                                }
+                                else
+                                {
+                                    <i class="bi bi-check2"></i>
+                                }
+                            </span>
+                            <strong>مراجعة الإدارة</strong>
+                        </div>
+                        <div class="status-progress-line @(Model.ApprovalStatus == ApprovalStatus.Approved ? "done" : "")"></div>
+                        <div class="status-step @(Model.ApprovalStatus == ApprovalStatus.Approved ? "done" : "")">
+                            <span><i class="bi bi-person-check"></i></span>
+                            <strong>تفعيل Provider</strong>
+                        </div>
+                    </div>
+
+                    <div class="status-details-grid">
+                        <div>
+                            <span>الاسم المهني</span>
+                            <strong>@Model.DisplayName</strong>
+                        </div>
+                        <div>
+                            <span>التخصص</span>
+                            <strong>@(Model.ServiceCategory?.Name ?? "—")</strong>
+                        </div>
+                        <div>
+                            <span>المنطقة</span>
+                            <strong>@(Model.Area?.Name ?? "—") — @Model.Area?.City.Name</strong>
+                        </div>
+                        <div>
+                            <span>تاريخ التقديم</span>
+                            <strong>@Model.CreatedAt.ToLocalTime().ToString("yyyy/MM/dd")</strong>
+                        </div>
+                    </div>
+
+                    <div class="status-card-footer">
+                        @if (Model.ApprovalStatus == ApprovalStatus.Approved && User.IsInRole(AppRoles.Provider))
+                        {
+                            <a class="btn fp-btn-gold" asp-area="" asp-controller="ProviderRequests" asp-action="Index">مساحة عمل المزود</a>
+                        }
+                        <a class="btn fp-btn-ghost" asp-controller="Home" asp-action="Index">
+                            العودة للرئيسية
+                        </a>
+
+                        @if (User.IsInRole(AppRoles.Admin))
+                        {
+                            <a class="btn fp-btn-navy" asp-controller="Admin" asp-action="Index">
+                                لوحة الإدارة
+                            </a>
+                        }
+                    </div>
+                </section>
+            </div>
+        </div>
+    </div>
+</div>

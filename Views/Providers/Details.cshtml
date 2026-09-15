@@ -1,0 +1,35 @@
+@model FixPal.Models.ViewModels.PublicProviderViewModel
+@{ ViewData["Title"] = Model.DisplayName; }
+<div class="container fp-workspace">
+    <a asp-area="" asp-action="Index" class="fp-text-link">العودة إلى دليل المزودين</a>
+    <section class="fp-public-profile">
+        <div>
+            <span class="fp-approved">ملف راجعته إدارة FixPal</span>
+            <h1>@Model.DisplayName</h1>
+            <partial name="_Availability" model="Model" />
+            <p class="fp-profile-specialty">@Model.Category <span class="fp-separator">/</span> @Model.Location</p>
+            <h2>عن مزود الخدمة</h2>
+            <p class="fp-description">@(string.IsNullOrWhiteSpace(Model.Description) ? "لم يضف المزود نبذة بعد." : Model.Description)</p>
+        </div>
+        <aside>
+            @if (Model.AcceptsPrivateRequests)
+            {
+                <h2>لديك مشكلة تحتاج حلًا؟</h2>
+                <p>أنشئ طلبًا لهذا المزود، ثم تابع القبول والتنفيذ من حسابك.</p>
+                <a asp-area="" asp-controller="MaintenanceRequests" asp-action="Create" asp-route-providerProfileId="@Model.Id" class="btn fp-btn-gold">اطلب هذه الخدمة</a>
+                <small>تسجيل الدخول مطلوب لإرسال الطلب. لا توجد دفعات داخل المنصة.</small>
+            }
+            else
+            {
+                <h2>ملف جهة مؤسسية</h2>
+                <p>التوجيه المباشر للجهات المؤسسية غير متاح بعد. يمكنك تسجيل بلاغ داخل FixPal بدون تعيين جهة.</p>
+                <a asp-area="" asp-controller="MaintenanceRequests" asp-action="Create" asp-route-requestType="PublicReport" class="btn fp-btn-gold">تسجيل بلاغ</a>
+            }
+        </aside>
+    </section>
+    <section class="fp-detail-panel mt-4"><h2>تجارب أصحاب الطلبات</h2>
+        @if (Model.Reviews.Items.Count == 0) { <p>لا توجد تقييمات منشورة بعد.</p> }
+        @foreach (var review in Model.Reviews.Items) { <article class="border-bottom py-3"><strong>عميل أكمل الخدمة · @review.Rating / 5</strong><p class="fp-description">@review.Comment</p><time data-utc="@review.CreatedAtUtc.ToString("yyyy-MM-ddTHH:mm:ssZ")">@review.CreatedAtUtc.ToString("u")</time></article> }
+        <nav class="fp-pagination">@if(Model.Reviews.Page>1) { <a asp-action="Details" asp-route-id="@Model.Id" asp-route-page="@(Model.Reviews.Page-1)">السابق</a> }<span>@Model.Reviews.Page / @Model.Reviews.TotalPages</span>@if(Model.Reviews.Page<Model.Reviews.TotalPages) { <a asp-action="Details" asp-route-id="@Model.Id" asp-route-page="@(Model.Reviews.Page+1)">التالي</a> }</nav>
+    </section>
+</div>

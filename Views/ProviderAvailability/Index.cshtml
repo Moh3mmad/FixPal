@@ -1,0 +1,6 @@
+@model FixPal.Models.ViewModels.AvailabilityViewModel
+@using FixPal.Models.Enums
+@{ ViewData["Title"] = "توفرّي للعمل"; }
+<div class="container fp-workspace"><div class="fp-page-heading"><div><span class="fp-eyebrow">مساحة المزود</span><h1>وقت مناسب للعمل.</h1><p>أخبر العملاء بمدى توفرّك. لا يغيّر هذا الطلبات المعيّنة لك مسبقًا.</p></div><a asp-area="" asp-controller="ProviderRequests" asp-action="Index" class="fp-text-link">طلبات العمل</a></div>
+<partial name="_Flash" />
+<form method="post" class="fp-detail-panel" style="max-width:650px"><div asp-validation-summary="All" class="text-danger"></div><label asp-for="Availability" class="form-label"></label><select asp-for="Availability" asp-items="Html.GetEnumSelectList<ProviderAvailability>()" class="form-select mb-3"></select><label asp-for="AvailableAfterUtc" class="form-label"></label><input asp-for="AvailableAfterUtc" type="datetime-local" class="form-control" /><p class="fp-field-hint">الموعد مطلوب فقط عند اختيار «متاح بعد موعد محدد». الوقت الحالي UTC: @DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm"). عند انقضاء الموعد سيظهر ملفك كمتاح الآن.</p><button type="submit" class="btn fp-btn-gold mt-3">حفظ التوفر</button></form></div>

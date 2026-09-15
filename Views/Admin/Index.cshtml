@@ -1,0 +1,199 @@
+@model FixPal.Models.ViewModels.AdminDashboardViewModel
+
+@{
+    ViewData["Title"] = "لوحة إدارة FixPal";
+}
+
+@section Styles {
+    <link rel="stylesheet" href="~/css/pages/admin.css" asp-append-version="true" />
+}
+
+<div class="container py-4 py-lg-5 admin-page">
+    <section class="admin-hero">
+        <div>
+            <span class="admin-kicker"><i class="bi bi-shield-check"></i> لوحة الإدارة</span>
+            <h1>نظرة تشغيلية واضحة على FixPal</h1>
+            <p>راجع طلبات الانضمام واطّلع على مناطق الخدمة والتخصصات.</p>
+        </div>
+        <div class="admin-hero-mark" aria-hidden="true">
+            <i class="bi bi-grid-1x2"></i>
+        </div>
+    </section>
+
+    @if (TempData["SuccessMessage"] != null)
+    {
+        <div class="alert alert-success admin-alert" role="status">
+            <i class="bi bi-check-circle-fill"></i>
+            <span>@TempData["SuccessMessage"]</span>
+        </div>
+    }
+
+    @if (TempData["ErrorMessage"] != null)
+    {
+        <div class="alert alert-danger admin-alert" role="alert">
+            <i class="bi bi-exclamation-triangle-fill"></i>
+            <span>@TempData["ErrorMessage"]</span>
+        </div>
+    }
+
+    <div class="row g-3 g-xl-4 mb-4">
+        <div class="col-6 col-xl-3">
+            <article class="admin-stat-card">
+                <span class="admin-stat-icon blue"><i class="bi bi-geo-alt"></i></span>
+                <strong>@Model.AreasCount</strong>
+                <span>المناطق</span>
+            </article>
+        </div>
+        <div class="col-6 col-xl-3">
+            <article class="admin-stat-card">
+                <span class="admin-stat-icon gold"><i class="bi bi-tools"></i></span>
+                <strong>@Model.CategoriesCount</strong>
+                <span>التخصصات</span>
+            </article>
+        </div>
+        <div class="col-6 col-xl-3">
+            <article class="admin-stat-card">
+                <span class="admin-stat-icon green"><i class="bi bi-person-badge"></i></span>
+                <strong>@Model.ProvidersCount</strong>
+                <span>ملفات مزودي الخدمة</span>
+            </article>
+        </div>
+        <div class="col-6 col-xl-3">
+            <article class="admin-stat-card is-attention">
+                <span class="admin-stat-icon orange"><i class="bi bi-hourglass-split"></i></span>
+                <strong>@Model.PendingProvidersCount</strong>
+                <span>بانتظار المراجعة</span>
+            </article>
+        </div>
+    </div>
+
+    <section class="admin-panel mb-4">
+        <div class="admin-panel-heading">
+            <div>
+                <span class="admin-section-label">Provider onboarding</span>
+                <h2>طلبات مزودي الخدمة</h2>
+                <p>راجع بيانات المتقدم قبل اعتماد طلبه. القرار نهائي في هذه النسخة.</p>
+            </div>
+            <span class="admin-pending-pill">
+                <i class="bi bi-clock"></i>
+                @Model.PendingProvidersCount قيد المراجعة
+            </span>
+        </div>
+
+        @if (Model.PendingProviders.Count > 0)
+        {
+            <div class="provider-review-list">
+                @foreach (var provider in Model.PendingProviders)
+                {
+                    <article class="provider-review-row">
+                        <div class="provider-identity">
+                            <div class="provider-avatar" aria-hidden="true">
+                                @(string.IsNullOrWhiteSpace(provider.DisplayName) ? "ف" : provider.DisplayName.Trim()[..1])
+                            </div>
+                            <div>
+                                <strong>@provider.DisplayName</strong>
+                                <span>@provider.User?.Email</span>
+                            </div>
+                        </div>
+
+                        <div class="provider-meta">
+                            <span>التخصص</span>
+                            <strong>@provider.ServiceCategory?.Name</strong>
+                        </div>
+
+                        <div class="provider-meta">
+                            <span>المنطقة</span>
+                            <strong>@provider.Area?.Name — @provider.Area?.City.Name</strong>
+                        </div>
+
+                        <div class="provider-meta">
+                            <span>تاريخ الطلب</span>
+                            <strong>@provider.CreatedAt.ToLocalTime().ToString("yyyy/MM/dd")</strong>
+                        </div>
+
+                        <div class="provider-actions">
+                            <form asp-action="ApproveProvider" method="post">
+                                <input type="hidden" name="id" value="@provider.Id" />
+                                <button type="submit" class="btn review-btn approve-btn">
+                                    <i class="bi bi-check2"></i>
+                                    اعتماد
+                                </button>
+                            </form>
+
+                            <form asp-action="RejectProvider" method="post">
+                                <input type="hidden" name="id" value="@provider.Id" />
+                                <button type="submit" class="btn review-btn reject-btn"
+                                        onclick="return confirm('هل أنت متأكد من رفض هذا الطلب؟');">
+                                    <i class="bi bi-x-lg"></i>
+                                    رفض
+                                </button>
+                            </form>
+                        </div>
+                    </article>
+                }
+            </div>
+        }
+        else
+        {
+            <div class="admin-empty-state">
+                <span><i class="bi bi-check2-circle"></i></span>
+                <h3>لا توجد طلبات معلّقة</h3>
+                <p>كل طلبات الانضمام الحالية تمت مراجعتها.</p>
+            </div>
+        }
+    </section>
+
+    <nav class="fp-pagination" aria-label="صفحات طلبات الاعتماد">
+        @if (Model.Page > 1) { <a asp-area="" asp-action="Index" asp-route-page="@(Model.Page - 1)">السابق</a> }
+        <span>صفحة @Model.Page من @Model.TotalPages</span>
+        @if (Model.Page < Model.TotalPages) { <a asp-area="" asp-action="Index" asp-route-page="@(Model.Page + 1)">التالي</a> }
+    </nav>
+    <div class="row g-4">
+        <div class="col-lg-6">
+            <section class="admin-panel h-100">
+                <div class="admin-panel-heading compact">
+                    <div>
+                        <span class="admin-section-label">Coverage</span>
+                        <h2>المناطق الحالية</h2>
+                    </div>
+                    <i class="bi bi-geo-alt"></i>
+                </div>
+
+                <div class="admin-data-list">
+                    @foreach (var area in Model.Areas)
+                    {
+                        <div class="admin-data-item">
+                            <span class="data-dot"></span>
+                            <strong>@area.Name</strong>
+                        </div>
+                    }
+                </div>
+            </section>
+        </div>
+
+        <div class="col-lg-6">
+            <section class="admin-panel h-100">
+                <div class="admin-panel-heading compact">
+                    <div>
+                        <span class="admin-section-label">Services</span>
+                        <h2>فئات الصيانة</h2>
+                    </div>
+                    <i class="bi bi-tools"></i>
+                </div>
+
+                <div class="admin-category-list">
+                    @foreach (var category in Model.Categories)
+                    {
+                        <div class="admin-category-item">
+                            <span class="category-icon"><i class="bi @category.Icon"></i></span>
+                            <div>
+                                <strong>@category.Name</strong>
+                                <span>@category.Description</span>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </section>
+        </div>
+    </div>
+</div>
