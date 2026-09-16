@@ -11,7 +11,7 @@ using Microsoft.EntityFrameworkCore;
 namespace FixPal.Controllers;
 [Authorize]
 [ResponseCache(Location = ResponseCacheLocation.None, NoStore = true)]
-public class MaintenanceRequestsController(ApplicationDbContext db, UserManager<ApplicationUser> users, FixPal.Services.ProviderMatchingService matching) : Controller
+public class MaintenanceRequestsController(ApplicationDbContext db, UserManager<ApplicationUser> users, FixPal.Services.ProviderMatchingService matching, FixPal.Services.RequestDetailsService details) : Controller
 {
     [HttpGet]
     public async Task<IActionResult> Index(int page = 1, CancellationToken ct = default)
@@ -27,8 +27,8 @@ public class MaintenanceRequestsController(ApplicationDbContext db, UserManager<
         var model = new CreateMaintenanceRequestViewModel { ServiceCategoryId = categoryId ?? 0, RequestType = Enum.IsDefined(requestType) ? requestType : RequestType.PrivateService };
         if (providerProfileId.HasValue)
         {
-            var provider = await db.ProviderProfiles.AsNoTracking()
-                .Where(p => p.Id == providerProfileId && p.ApprovalStatus == ApprovalStatus.Approved && p.Area!.City.IsActive && p.ProviderType == ProviderType.Individual)
+            var provider = await FixPal.Services.ProviderEligibility.Active(db).AsNoTracking()
+                .Where(p => p.Id == providerProfileId && p.UserId != users.GetUserId(User) && p.ApprovalStatus == ApprovalStatus.Approved && p.Area!.City.IsActive && p.ProviderType == ProviderType.Individual)
                 .Select(p => new { p.Id, p.DisplayName, p.ServiceCategoryId, p.AreaId, p.Area!.CityId }).SingleOrDefaultAsync(ct);
             if (provider == null) return NotFound();
             model.ProviderProfileId = provider.Id; model.ServiceCategoryId = provider.ServiceCategoryId;
@@ -37,11 +37,12 @@ public class MaintenanceRequestsController(ApplicationDbContext db, UserManager<
         await LoadOptions(model, ct);
         return View(model);
     }
-    [HttpPost]
+    [HttpPost, Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("writes")]
     public async Task<IActionResult> Create(CreateMaintenanceRequestViewModel model, CancellationToken ct)
     {
         var user = await users.GetUserAsync(User);
         if (user == null) return Challenge();
+        await using var tx = await db.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable, ct);
         model.Title = model.Title?.Trim() ?? string.Empty;
         model.Description = model.Description?.Trim() ?? string.Empty;
         if (model.Latitude.HasValue != model.Longitude.HasValue || (model.Latitude.HasValue && (!double.IsFinite(model.Latitude.Value) || !double.IsFinite(model.Longitude!.Value))))
@@ -54,9 +55,7 @@ public class MaintenanceRequestsController(ApplicationDbContext db, UserManager<
             ModelState.AddModelError(nameof(model.AreaId), "اختر منطقة تابعة للمدينة المحددة.");
         if (model.RequestType == RequestType.PublicReport && model.ProviderProfileId.HasValue)
             ModelState.AddModelError(nameof(model.ProviderProfileId), "البلاغ العام يُسجل بدون تعيين مزود في هذه النسخة.");
-        if (model.ProviderProfileId.HasValue && !await db.ProviderProfiles.AnyAsync(p => p.Id == model.ProviderProfileId
-            && p.ApprovalStatus == ApprovalStatus.Approved && p.ProviderType == ProviderType.Individual
-            && p.ServiceCategoryId == model.ServiceCategoryId && p.AreaId == model.AreaId && p.Area!.City.IsActive, ct))
+        if (model.ProviderProfileId.HasValue && !await FixPal.Services.ProviderEligibility.ForRequest(db, model.ServiceCategoryId, model.AreaId, user.Id).AnyAsync(p => p.Id == model.ProviderProfileId, ct))
             ModelState.AddModelError(nameof(model.ProviderProfileId), "المزود غير متاح لهذا التخصص والمنطقة. اختر مزودًا آخر أو اترك الطلب بدون تعيين.");
         if (!ModelState.IsValid) { await LoadOptions(model, ct); return View(model); }
         var request = new MaintenanceRequest
@@ -69,32 +68,22 @@ public class MaintenanceRequestsController(ApplicationDbContext db, UserManager<
         };
         db.MaintenanceRequests.Add(request);
         await db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
         TempData["SuccessMessage"] = "تم تسجيل طلبك. يمكنك متابعة حالته من هذه الصفحة.";
         return RedirectToAction(nameof(Details), new { id = request.Id });
     }
     [HttpGet]
-    public async Task<IActionResult> Details(int id, CancellationToken ct)
+    public async Task<IActionResult> Details(int id, int quotePage = 1, CancellationToken ct = default)
     {
-        var user = await users.GetUserAsync(User);
-        if (user == null) return Challenge();
-        var admin = User.IsInRole(AppRoles.Admin) && await users.IsInRoleAsync(user, AppRoles.Admin);
-        var provider = User.IsInRole(AppRoles.Provider) && await users.IsInRoleAsync(user, AppRoles.Provider);
-        var access = await db.MaintenanceRequests.AsNoTracking().Where(r => r.Id == id)
-            .Select(r => new { Owner = r.CustomerId == user.Id, Assigned = provider && r.ProviderProfile != null
-                && r.ProviderProfile.UserId == user.Id && r.ProviderProfile.ApprovalStatus == ApprovalStatus.Approved }).SingleOrDefaultAsync(ct);
-        if (access == null || !(admin || access.Owner || access.Assigned)) return NotFound();
-        var model = await db.MaintenanceRequests.AsNoTracking().Where(r => r.Id == id).Select(RequestDetailsViewModel.DetailProjection).SingleAsync(ct);
-        model.CanManage = access.Assigned; model.IsOwner = access.Owner;
-        model.Quote = await db.RequestQuotes.AsNoTracking().SingleOrDefaultAsync(q => q.MaintenanceRequestId == id, ct);
-        model.Review = await db.ProviderReviews.AsNoTracking().SingleOrDefaultAsync(r => r.MaintenanceRequestId == id, ct);
-        return View(model);
+        var model = await details.GetAsync(User, id, quotePage, ct);
+        return model == null ? NotFound() : View(model);
     }
     [HttpGet]
     public async Task<IActionResult> ProviderOptions(int categoryId, int areaId, string? q, CancellationToken ct)
     {
         q = q?.Trim();
         if (q?.Length > 100) return BadRequest();
-        return Json(await matching.FindAsync(categoryId, areaId, q, ct));
+        return Json(await matching.FindAsync(categoryId, areaId, q, ct, users.GetUserId(User)));
     }
     private async Task LoadOptions(CreateMaintenanceRequestViewModel model, CancellationToken ct)
     {
@@ -106,3 +95,5 @@ public class MaintenanceRequestsController(ApplicationDbContext db, UserManager<
             model.SelectedProviderName = await db.ProviderProfiles.AsNoTracking().Where(p => p.Id == model.ProviderProfileId && p.ApprovalStatus == ApprovalStatus.Approved).Select(p => p.DisplayName).SingleOrDefaultAsync(ct);
     }
 }
+
+

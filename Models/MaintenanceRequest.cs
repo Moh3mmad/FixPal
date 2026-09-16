@@ -3,6 +3,7 @@ using FixPal.Models.Enums;
 namespace FixPal.Models;
 public class MaintenanceRequest
 {
+    public bool IsLegacy { get; set; }
     public int Id { get; set; }
     [Required] public string CustomerId { get; set; } = string.Empty;
     public ApplicationUser Customer { get; set; } = null!;

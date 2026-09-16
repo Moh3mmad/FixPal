@@ -1,21 +1,78 @@
 @model FixPal.Models.ViewModels.RequestDetailsViewModel
+@using FixPal.Models
 @using FixPal.Models.Enums
+@{
+    string Label(QuoteState? state) => state switch {
+        QuoteState.Accepted => "تم قبول العرض", QuoteState.Rejected => "رُفض العرض",
+        QuoteState.RevisionRequested => "طُلب تعديل العرض", _ => "بانتظار قرار العميل" };
+    var quote = Model.Quote;
+    var current = quote?.CurrentRevision;
+    var canSubmit = Model.CanManage && Model.Status == MaintenanceRequestStatus.Accepted
+        && (quote == null || quote.State is QuoteState.Rejected or QuoteState.RevisionRequested);
+}
 @if (Model.RequestType == RequestType.PrivateService)
 {
-    <section class="fp-detail-panel mt-4"><span class="fp-eyebrow">السعر بشفافية</span><h2>عرض السعر</h2>
-    @if (Model.Quote is { } quote)
-    {
-        <p class="fs-4 fw-bold">@quote.MinimumPrice.ToString("0.00") – @quote.MaximumPrice.ToString("0.00") <small>شيكل</small></p>
-        <p class="fp-description">@quote.Note</p>
-        <p class="fp-field-hint">أُرسل <time data-utc="@quote.SubmittedAtUtc.ToString("yyyy-MM-ddTHH:mm:ssZ")">@quote.SubmittedAtUtc.ToString("u")</time></p>
-        @if (quote.AcceptedAtUtc.HasValue) { <p class="fp-approved">قبله صاحب الطلب <time data-utc="@quote.AcceptedAtUtc.Value.ToString("yyyy-MM-ddTHH:mm:ssZ")">@quote.AcceptedAtUtc.Value.ToString("u")</time></p> }
-        else if (Model.IsOwner && Model.Status is not (MaintenanceRequestStatus.Completed or MaintenanceRequestStatus.Cancelled))
-        { <form asp-area="" asp-controller="RequestQuotes" asp-action="Accept" asp-route-id="@Model.Id" method="post"><p>قبول النطاق ليس عملية دفع. اتفقا على السعر النهائي قبل إنهاء الخدمة.</p><button class="btn fp-btn-gold" type="submit">قبول نطاق السعر</button></form> }
-    }
-    else if (Model.CanManage && Model.Status is not (MaintenanceRequestStatus.Completed or MaintenanceRequestStatus.Cancelled))
-    {
-        <form asp-area="" asp-controller="RequestQuotes" asp-action="Submit" asp-route-id="@Model.Id" method="post"><p class="fp-field-hint">عرض واحد محفوظ لكل طلب؛ راجع المبالغ قبل الإرسال.</p><div class="row g-3"><div class="col-md-6"><label for="quote-min" class="form-label">الحد الأدنى (شيكل)</label><input id="quote-min" name="MinimumPrice" type="number" min="0.01" max="1000000" step="0.01" required class="form-control" /></div><div class="col-md-6"><label for="quote-max" class="form-label">الحد الأعلى (شيكل)</label><input id="quote-max" name="MaximumPrice" type="number" min="0.01" max="1000000" step="0.01" required class="form-control" /></div></div><label for="quote-note" class="form-label mt-3">ملاحظة (اختياري)</label><textarea id="quote-note" name="Note" maxlength="500" rows="2" class="form-control"></textarea><button class="btn fp-btn-navy mt-3" type="submit">إرسال العرض</button></form>
-    }
-    else { <p>لم يرسل المزود عرض سعر بعد.</p> }
+    <section class="fp-detail-panel mt-4">
+        <span class="fp-eyebrow">اتفاق واضح بين الطرفين</span><h2>عرض السعر</h2>
+        @if (Model.IsLegacy) { <p class="fp-field-hint">سجل سابق لتحديث الاتفاقات. لا نفترض موافقة غير مسجلة، ويبقى تاريخه محفوظًا.</p> }
+        @if (current != null)
+        {
+            <h3 class="h5">@(current.Number > 1 ? "عرض معدّل" : "العرض الأول") · النسخة @current.Number</h3>
+            <p class="fs-4 fw-bold">@current.MinimumPrice.ToString("0.00") – @current.MaximumPrice.ToString("0.00") شيكل</p>
+            <p class="fp-description">@current.Note</p>
+            <p><strong>@Label(quote!.State)</strong></p>
+            @if (Model.HasAgreement) { <p class="fp-approved">تم تأكيد الاتفاق بين الطرفين على النسخة @quote.AcceptedRevisionNumber.</p> }
+            @if (quote.State == QuoteState.AwaitingCustomer && Model.CanDecideQuote)
+            {
+                <form asp-area="" asp-controller="RequestQuotes" asp-action="Accept" asp-route-id="@Model.Id" method="post" class="mb-3">
+                    <input type="hidden" name="revisionNumber" value="@current.Number" />
+                    <p class="fp-field-hint">توافق على هذا النطاق تحديدًا. لا تُحصّل أي أموال.</p>
+                    <button class="btn fp-btn-gold" type="submit">قبول العرض</button>
+                </form>
+                <form asp-area="" asp-controller="RequestQuotes" asp-route-id="@Model.Id" method="post">
+                    <input type="hidden" name="revisionNumber" value="@current.Number" />
+                    <label for="decision-note" class="form-label">ملاحظة للمزود (اختياري)</label>
+                    <textarea id="decision-note" name="note" maxlength="500" rows="2" class="form-control mb-3"></textarea>
+                    <div class="d-flex flex-wrap gap-2">
+                        <button asp-action="RequestRevision" class="btn fp-btn-navy" type="submit">طلب تعديل العرض</button>
+                        <button asp-action="Reject" class="btn fp-btn-ghost" type="submit">رفض العرض</button>
+                    </div>
+                </form>
+            }
+        }
+        else { <p>@(Model.Status == MaintenanceRequestStatus.Pending ? "بانتظار استعداد المزود لتولي الطلب، ثم إرسال عرضه." : "بانتظار عرض سعر من المزود.")</p> }
+        @if (canSubmit)
+        {
+            <form asp-area="" asp-controller="RequestQuotes" asp-action="Submit" asp-route-id="@Model.Id" method="post">
+                <input type="hidden" name="ExpectedRevisionNumber" value="@quote?.CurrentRevisionNumber" />
+                <p class="fp-field-hint">أرسل نطاقًا واضحًا. تُحفظ كل نسخة وقرارها دون استبدال العروض السابقة.</p>
+                <div class="row g-3">
+                    <div class="col-md-6"><label for="quote-min" class="form-label">الحد الأدنى (شيكل)</label><input id="quote-min" name="MinimumPrice" type="number" min="0.01" max="1000000" step="0.01" required class="form-control" /></div>
+                    <div class="col-md-6"><label for="quote-max" class="form-label">الحد الأعلى (شيكل)</label><input id="quote-max" name="MaximumPrice" type="number" min="0.01" max="1000000" step="0.01" required class="form-control" /></div>
+                </div>
+                <label for="quote-note" class="form-label mt-3">تفاصيل العرض أو التعديل (اختياري)</label>
+                <textarea id="quote-note" name="Note" maxlength="500" rows="2" class="form-control"></textarea>
+                <button class="btn fp-btn-navy mt-3" type="submit">@(quote == null ? "إرسال العرض" : "إرسال عرض معدّل")</button>
+            </form>
+        }
+        @if (Model.QuoteHistory.Items.Count > 0)
+        {
+            <details class="mt-4" open><summary>سجل العروض والقرارات</summary>
+            @foreach (var item in Model.QuoteHistory.Items)
+            {
+                <article class="border-bottom py-3">
+                    <strong>النسخة @item.Number · @item.MinimumPrice.ToString("0.00") – @item.MaximumPrice.ToString("0.00") شيكل</strong>
+                    <p class="fp-description my-2">@item.Note</p>
+                    <time data-utc="@item.CreatedAtUtc.ToString("yyyy-MM-ddTHH:mm:ssZ")">@item.CreatedAtUtc.ToString("u")</time>
+                    <p class="my-2">@Label(item.Decision)</p><p class="fp-description my-2">@item.DecisionNote</p>
+                    @if (item.DecidedAtUtc.HasValue) { <time data-utc="@item.DecidedAtUtc.Value.ToString("yyyy-MM-ddTHH:mm:ssZ")">@item.DecidedAtUtc.Value.ToString("u")</time> }
+                </article>
+            }
+            <nav class="fp-pagination" aria-label="صفحات سجل العروض">
+                @if (Model.QuoteHistory.Page > 1) { <a asp-controller="MaintenanceRequests" asp-action="Details" asp-route-id="@Model.Id" asp-route-quotePage="@(Model.QuoteHistory.Page - 1)">السابق</a> }
+                <span>@Model.QuoteHistory.Page / @Model.QuoteHistory.TotalPages</span>
+                @if (Model.QuoteHistory.Page < Model.QuoteHistory.TotalPages) { <a asp-controller="MaintenanceRequests" asp-action="Details" asp-route-id="@Model.Id" asp-route-quotePage="@(Model.QuoteHistory.Page + 1)">التالي</a> }
+            </nav></details>
+        }
     </section>
 }

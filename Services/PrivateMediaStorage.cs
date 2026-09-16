@@ -1,4 +1,7 @@
-using System.Buffers.Binary;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Formats;
+using SixLabors.ImageSharp.Formats.Png;
+using SixLabors.ImageSharp.Formats.Jpeg;
 using System.Text.RegularExpressions;
 namespace FixPal.Services;
 public record StoredMedia(string Key, string ContentType, long Size);
@@ -51,18 +54,27 @@ public static class ImageUploadValidation
             await buffer.WriteAsync(chunk.AsMemory(0, read), ct);
         }
         var bytes = buffer.ToArray();
-        var png = bytes.Length >= 33 && bytes.AsSpan(0, 8).SequenceEqual(new byte[] {137,80,78,71,13,10,26,10})
-            && bytes.AsSpan(12,4).SequenceEqual("IHDR"u8);
-        var jpeg = bytes.Length >= 20 && bytes[0] == 255 && bytes[1] == 216 && bytes[2] == 255 && bytes[^2] == 255 && bytes[^1] == 217;
-        if (!png && !jpeg) throw new InvalidDataException("اختر صورة PNG أو JPEG صحيحة؛ الامتداد وحده لا يكفي.");
-        if (png)
+        try
         {
-            var width = BinaryPrimitives.ReadUInt32BigEndian(bytes.AsSpan(16,4));
-            var height = BinaryPrimitives.ReadUInt32BigEndian(bytes.AsSpan(20,4));
-            if (width == 0 || height == 0 || width > 12000 || height > 12000 || (long)width * height > 40000000)
+            var options = new DecoderOptions { SkipMetadata = true, MaxFrames = 1 };
+            using var source = new MemoryStream(bytes, writable: false);
+            var format = await Image.DetectFormatAsync(source, ct);
+            if (format.Name is not ("PNG" or "JPEG")) throw new InvalidDataException("اختر صورة PNG أو JPEG صحيحة.");
+            source.Position = 0;
+            var info = await Image.IdentifyAsync(options, source, ct);
+            if (info.Width is <= 0 or > 12000 || info.Height is <= 0 or > 12000 || (long)info.Width * info.Height > 40000000)
                 throw new InvalidDataException("أبعاد الصورة أكبر من الحد المسموح.");
+            source.Position = 0;
+            using var decoded = await Image.LoadAsync(options, source, ct);
+            // Store re-encoded pixels, without EXIF/GPS or unparsed trailing payloads.
+            using var normalized = new MemoryStream();
+            await decoded.SaveAsync(normalized, format.Name == "PNG" ? new PngEncoder() : new JpegEncoder { Quality = 85 }, ct);
+            if (normalized.Length > MaxBytes) throw new InvalidDataException("الصورة بعد المعالجة أكبر من 5 ميغابايت.");
+            return new(normalized.ToArray(), format.Name == "PNG" ? "image/png" : "image/jpeg");
         }
-        return new(bytes, png ? "image/png" : "image/jpeg");
+        catch (Exception ex) when (ex is UnknownImageFormatException or InvalidImageContentException or NotSupportedException)
+        {
+            throw new InvalidDataException("تعذر قراءة الصورة. اختر ملف PNG أو JPEG سليمًا.", ex);
+        }
     }
 }
-

@@ -17,11 +17,33 @@ namespace FixPal.Data
         public DbSet<City> Cities { get; set; }
         public DbSet<MaintenanceRequest> MaintenanceRequests { get; set; }
         public DbSet<RequestQuote> RequestQuotes { get; set; }
+        public DbSet<QuoteRevision> QuoteRevisions { get; set; }
+        public DbSet<QuoteDecision> QuoteDecisions { get; set; }
         public DbSet<RequestMessage> RequestMessages { get; set; }
         public DbSet<RequestEvidence> RequestEvidence { get; set; }
         public DbSet<ProviderReview> ProviderReviews { get; set; }
         public DbSet<ServiceCategory> ServiceCategories { get; set; }
         public DbSet<ProviderProfile> ProviderProfiles { get; set; }
+
+        private void ProtectQuoteHistory()
+        {
+            ChangeTracker.DetectChanges();
+            if (ChangeTracker.Entries().Any(e => (e.Entity is QuoteRevision or QuoteDecision)
+                && e.State is EntityState.Modified or EntityState.Deleted))
+                throw new InvalidOperationException("Quote history is immutable. Append a new revision or decision instead.");
+        }
+
+        public override int SaveChanges(bool acceptAllChangesOnSuccess)
+        {
+            ProtectQuoteHistory();
+            return base.SaveChanges(acceptAllChangesOnSuccess);
+        }
+
+        public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+        {
+            ProtectQuoteHistory();
+            return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+        }
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -42,6 +64,24 @@ namespace FixPal.Data
             message.HasOne(m => m.Sender).WithMany().HasForeignKey(m => m.SenderId).OnDelete(DeleteBehavior.Restrict);
             message.HasIndex(m => new { m.MaintenanceRequestId, m.CreatedAtUtc, m.Id });
             var quote = builder.Entity<RequestQuote>();
+            quote.Property(q => q.Id).UseIdentityColumn();
+            quote.Property(q => q.RowVersion).IsRowVersion();
+            var revision = builder.Entity<QuoteRevision>();
+            revision.HasKey(r => new { r.RequestQuoteId, r.Number });
+            revision.HasOne(r => r.RequestQuote).WithMany().HasForeignKey(r => r.RequestQuoteId).OnDelete(DeleteBehavior.Restrict);
+            revision.HasOne<ApplicationUser>().WithMany().HasForeignKey(r => r.ProviderAuthorId).OnDelete(DeleteBehavior.Restrict);
+            revision.Property(r => r.MinimumPrice).HasPrecision(18, 2);
+            revision.Property(r => r.MaximumPrice).HasPrecision(18, 2);
+            revision.ToTable(t => t.HasCheckConstraint("CK_QuoteRevisions_Terms", "[Number] > 0 AND [MinimumPrice] > 0 AND [MaximumPrice] >= [MinimumPrice] AND [MaximumPrice] <= 1000000"));
+            quote.HasOne(q => q.CurrentRevision).WithMany().HasForeignKey(q => new { q.Id, q.CurrentRevisionNumber }).OnDelete(DeleteBehavior.Restrict);
+            quote.HasOne(q => q.AcceptedRevision).WithMany().HasForeignKey(q => new { q.Id, q.AcceptedRevisionNumber }).OnDelete(DeleteBehavior.Restrict);
+            quote.ToTable(t => t.HasCheckConstraint("CK_RequestQuotes_Agreement", "([State] = 0 AND [CurrentRevisionNumber] IS NULL AND [AcceptedRevisionNumber] IS NULL) OR ([State] IN (1,3,4) AND [CurrentRevisionNumber] IS NOT NULL AND [AcceptedRevisionNumber] IS NULL) OR ([State] = 2 AND [AcceptedRevisionNumber] IS NOT NULL AND [CurrentRevisionNumber] = [AcceptedRevisionNumber] AND [AcceptedAtUtc] IS NOT NULL)"));
+            var decision = builder.Entity<QuoteDecision>();
+            decision.HasKey(d => new { d.RequestQuoteId, d.RevisionNumber });
+            decision.HasOne(d => d.Revision).WithMany().HasForeignKey(d => new { d.RequestQuoteId, d.RevisionNumber }).OnDelete(DeleteBehavior.Restrict);
+            decision.HasOne<ApplicationUser>().WithMany().HasForeignKey(d => d.CustomerAuthorId).OnDelete(DeleteBehavior.Restrict);
+            decision.HasIndex(d => d.RequestQuoteId).IsUnique().HasFilter("[State] = 2");
+            decision.ToTable(t => t.HasCheckConstraint("CK_QuoteDecisions_State", "[State] IN (2,3,4)"));
             quote.HasIndex(q => q.MaintenanceRequestId).IsUnique();
             quote.HasOne(q => q.MaintenanceRequest).WithMany().HasForeignKey(q => q.MaintenanceRequestId).OnDelete(DeleteBehavior.Restrict);
             quote.HasOne(q => q.ProviderProfile).WithMany().HasForeignKey(q => q.ProviderProfileId).OnDelete(DeleteBehavior.Restrict);
@@ -56,6 +96,7 @@ namespace FixPal.Data
             builder.Entity<ProviderProfile>().Property(p => p.ApprovalStatus).IsConcurrencyToken();
             builder.Entity<ProviderProfile>().HasIndex(p => new { p.ApprovalStatus, p.ServiceCategoryId, p.AreaId });
             var request = builder.Entity<MaintenanceRequest>();
+            request.Property(r => r.IsLegacy).HasDefaultValue(false);
             request.HasOne(r => r.Customer).WithMany().HasForeignKey(r => r.CustomerId).OnDelete(DeleteBehavior.Restrict);
             request.HasOne(r => r.ProviderProfile).WithMany().HasForeignKey(r => r.ProviderProfileId).OnDelete(DeleteBehavior.Restrict);
             request.HasOne(r => r.ServiceCategory).WithMany().HasForeignKey(r => r.ServiceCategoryId).OnDelete(DeleteBehavior.Restrict);

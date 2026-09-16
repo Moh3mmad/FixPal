@@ -1,29 +1,30 @@
+using FixPal.Models;
 using FixPal.Models.ViewModels;
 using FixPal.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.RateLimiting;
 namespace FixPal.Controllers;
-[Authorize]
-public class RequestQuotesController(RequestCommerceService commerce, ILogger<RequestQuotesController> logger) : Controller
+[Authorize, EnableRateLimiting("writes")]
+public class RequestQuotesController(RequestCommerceService commerce) : Controller
 {
     [HttpPost]
-    public async Task<IActionResult> Submit(int id, QuoteInputModel input, CancellationToken ct)
-    {
-        var ok = false;
-        if (ModelState.IsValid)
-        {
-            try { ok = await commerce.SubmitQuoteAsync(User, id, input, ct); }
-            catch (DbUpdateException ex) { logger.LogWarning(ex, "Concurrent quote submission for request {Id}", id); }
-        }
-        TempData[ok ? "SuccessMessage" : "ErrorMessage"] = ok ? "تم إرسال عرض السعر." : "تعذر إرسال العرض. تحقق من النطاق وحالة الطلب؛ يُسمح بعرض واحد فقط.";
-        return RedirectToAction("Details", "MaintenanceRequests", new { id });
-    }
+    public async Task<IActionResult> Submit(int id, QuoteInputModel input, CancellationToken ct) =>
+        Result(id, ModelState.IsValid ? await commerce.SubmitQuoteAsync(User, id, input, ct) : MutationResult.Conflict);
     [HttpPost]
-    public async Task<IActionResult> Accept(int id, CancellationToken ct)
+    public Task<IActionResult> Accept(int id, int revisionNumber, CancellationToken ct) => Decide(id, revisionNumber, QuoteState.Accepted, null, ct);
+    [HttpPost]
+    public Task<IActionResult> Reject(int id, int revisionNumber, string? note, CancellationToken ct) => Decide(id, revisionNumber, QuoteState.Rejected, note, ct);
+    [HttpPost]
+    public Task<IActionResult> RequestRevision(int id, int revisionNumber, string? note, CancellationToken ct) => Decide(id, revisionNumber, QuoteState.RevisionRequested, note, ct);
+    private async Task<IActionResult> Decide(int id, int revisionNumber, QuoteState state, string? note, CancellationToken ct) =>
+        Result(id, ModelState.IsValid ? await commerce.DecideAsync(User, id, revisionNumber, state, note, ct) : MutationResult.Conflict);
+    private IActionResult Result(int id, MutationResult result)
     {
-        var ok = await commerce.AcceptQuoteAsync(User, id, ct);
-        TempData[ok ? "SuccessMessage" : "ErrorMessage"] = ok ? "تم قبول نطاق السعر. لا يتم دفع أي أموال في المنصة." : "تعذر قبول العرض؛ تحقق من ملكية الطلب وحالته.";
+        if (result == MutationResult.NotFound) return NotFound();
+        TempData[result == MutationResult.Success ? "SuccessMessage" : "ErrorMessage"] = result == MutationResult.Success
+            ? "تم حفظ قرارك أو عرضك في سجل الاتفاق. لا تُجرى أي دفعات حقيقية."
+            : "لم يُحفظ التغيير. ربما تغير العرض أو حالة الطلب؛ حدّث الصفحة وراجع البيانات قبل المحاولة.";
         return RedirectToAction("Details", "MaintenanceRequests", new { id });
     }
 }

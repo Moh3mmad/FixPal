@@ -1,79 +1,65 @@
+using System.Security.Claims;
 using FixPal.Data;
-using FixPal.Infrastructure;
-using FixPal.Infrastructure.Identity;
-using FixPal.Models;
 using FixPal.Models.Enums;
 using FixPal.Models.ViewModels;
+using FixPal.Services;
+using FixPal.Infrastructure.Identity;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 namespace FixPal.Controllers;
 [Authorize(Roles = AppRoles.Provider)]
 [ResponseCache(Location = ResponseCacheLocation.None, NoStore = true)]
-public class ProviderRequestsController(ApplicationDbContext db, UserManager<ApplicationUser> users) : Controller
+public class ProviderRequestsController(ApplicationDbContext db, RequestAccessService access, RequestWorkflowService workflow, RequestDetailsService details) : Controller
 {
-    private async Task<int?> ApprovedProviderId(CancellationToken ct)
-    {
-        var user = await users.GetUserAsync(User);
-        if (user == null || !await users.IsInRoleAsync(user, AppRoles.Provider)) return null;
-        return await db.ProviderProfiles.AsNoTracking().Where(p => p.UserId == user.Id && p.ApprovalStatus == ApprovalStatus.Approved).Select(p => (int?)p.Id).SingleOrDefaultAsync(ct);
-    }
     [HttpGet]
     public async Task<IActionResult> Index(int page = 1, MaintenanceRequestStatus? status = null, CancellationToken ct = default)
     {
-        var providerId = await ApprovedProviderId(ct);
-        if (!providerId.HasValue) return Forbid();
+        var providerId = await access.ProviderIdAsync(User, ct);
+        if (providerId == null) return Forbid();
         var query = db.MaintenanceRequests.AsNoTracking().Where(r => r.ProviderProfileId == providerId);
         if (status.HasValue && Enum.IsDefined(status.Value)) query = query.Where(r => r.Status == status);
         ViewData["StatusFilter"] = status;
         return View(await PagedResult<RequestSummaryViewModel>.CreateAsync(query.OrderByDescending(r => r.CreatedAtUtc).ThenByDescending(r => r.Id).Select(RequestSummaryViewModel.Projection), page, ct));
     }
     [HttpGet]
-    public async Task<IActionResult> Details(int id, CancellationToken ct)
+    public async Task<IActionResult> Available(int page = 1, CancellationToken ct = default)
     {
-        var providerId = await ApprovedProviderId(ct);
-        if (!providerId.HasValue) return Forbid();
-        var model = await db.MaintenanceRequests.AsNoTracking().Where(r => r.Id == id && r.ProviderProfileId == providerId)
-            .Select(RequestDetailsViewModel.DetailProjection).SingleOrDefaultAsync(ct);
-        if (model == null) return NotFound();
-        model.CanManage = true;
-        model.Quote = await db.RequestQuotes.AsNoTracking().SingleOrDefaultAsync(q => q.MaintenanceRequestId == id, ct);
-        model.Review = await db.ProviderReviews.AsNoTracking().SingleOrDefaultAsync(r => r.MaintenanceRequestId == id, ct);
-        return View("~/Views/MaintenanceRequests/Details.cshtml", model);
+        var providerId = await access.ProviderIdAsync(User, ct);
+        if (providerId == null) return Forbid();
+        return View(await PagedResult<ClaimableRequestItem>.CreateAsync(workflow.Claimable(providerId.Value, User.FindFirstValue(ClaimTypes.NameIdentifier)!)
+            .AsNoTracking().OrderByDescending(r => r.CreatedAtUtc).ThenByDescending(r => r.Id)
+            .Select(r => new ClaimableRequestItem(r.Id, r.ServiceCategory.Name, r.Area.City.Name + " — " + r.Area.Name, r.CreatedAtUtc)), page, ct));
     }
-    [HttpPost] public Task<IActionResult> Accept(int id, CancellationToken ct) => Transition(id, MaintenanceRequestStatus.Pending, MaintenanceRequestStatus.Accepted, ct);
-    [HttpPost] public Task<IActionResult> Start(int id, CancellationToken ct) => Transition(id, MaintenanceRequestStatus.Accepted, MaintenanceRequestStatus.InProgress, ct);
-    [HttpPost] public Task<IActionResult> Complete(int id, CancellationToken ct) => Transition(id, MaintenanceRequestStatus.InProgress, MaintenanceRequestStatus.Completed, ct);
+    [HttpGet]
+    public async Task<IActionResult> Details(int id, int quotePage = 1, CancellationToken ct = default)
+    {
+        var providerId = await access.ProviderIdAsync(User, ct);
+        if (providerId == null) return Forbid();
+        if (!await db.MaintenanceRequests.AnyAsync(r => r.Id == id && r.ProviderProfileId == providerId, ct)) return NotFound();
+        var model = await details.GetAsync(User, id, quotePage, ct);
+        return model == null ? NotFound() : View("~/Views/MaintenanceRequests/Details.cshtml", model);
+    }
+    [HttpPost, EnableRateLimiting("writes")]
+    public async Task<IActionResult> Claim(int id, CancellationToken ct)
+    {
+        var result = await workflow.ClaimAsync(User, id, ct);
+        if (result == MutationResult.NotFound) return NotFound();
+        SetFeedback(result);
+        return result == MutationResult.Success ? RedirectToAction(nameof(Details), new { id }) : RedirectToAction(nameof(Available));
+    }
+    [HttpPost, EnableRateLimiting("writes")] public Task<IActionResult> Accept(int id, CancellationToken ct) => Transition(id, MaintenanceRequestStatus.Pending, MaintenanceRequestStatus.Accepted, ct);
+    [HttpPost, EnableRateLimiting("writes")] public Task<IActionResult> Start(int id, CancellationToken ct) => Transition(id, MaintenanceRequestStatus.Accepted, MaintenanceRequestStatus.InProgress, ct);
+    [HttpPost, EnableRateLimiting("writes")] public Task<IActionResult> Complete(int id, CancellationToken ct) => Transition(id, MaintenanceRequestStatus.InProgress, MaintenanceRequestStatus.Completed, ct);
     private async Task<IActionResult> Transition(int id, MaintenanceRequestStatus from, MaintenanceRequestStatus to, CancellationToken ct)
     {
-        var providerId = await ApprovedProviderId(ct);
-        if (!providerId.HasValue) return Forbid();
-        if (!RequestWorkflow.CanTransition(from, to)) return BadRequest();
-        var userId = users.GetUserId(User);
-        // Status, assignment, approval AND current database role are checked in the UPDATE.
-        // Competing submissions cannot both succeed or overwrite timestamps.
-        var query = db.MaintenanceRequests.Where(r => r.Id == id && r.ProviderProfileId == providerId && r.Status == from
-            && r.ProviderProfile!.ApprovalStatus == ApprovalStatus.Approved
-            && db.UserRoles.Any(ur => ur.UserId == userId && db.Roles.Any(role => role.Id == ur.RoleId && role.Name == AppRoles.Provider)));
-        var now = DateTime.UtcNow;
-        // Once a quote exists, finishing requires the owner's agreement to the final price.
-        if (to == MaintenanceRequestStatus.Completed)
-            query = query.Where(r => !db.RequestQuotes.Any(q => q.MaintenanceRequestId == r.Id)
-                || db.RequestQuotes.Any(q => q.MaintenanceRequestId == r.Id && q.AcceptedAtUtc != null && q.FinalPrice != null && q.FinalPriceAcceptedAtUtc != null));
-        var changed = to switch
-        {
-            MaintenanceRequestStatus.Accepted => await query.ExecuteUpdateAsync(s => s.SetProperty(r => r.Status, to).SetProperty(r => r.AcceptedAtUtc, now), ct),
-            MaintenanceRequestStatus.InProgress => await query.ExecuteUpdateAsync(s => s.SetProperty(r => r.Status, to).SetProperty(r => r.StartedAtUtc, now), ct),
-            MaintenanceRequestStatus.Completed => await query.ExecuteUpdateAsync(s => s.SetProperty(r => r.Status, to).SetProperty(r => r.CompletedAtUtc, now), ct),
-            _ => 0
-        };
-        if (changed == 0)
-        {
-            if (!await db.MaintenanceRequests.AnyAsync(r => r.Id == id && r.ProviderProfileId == providerId, ct)) return NotFound();
-            TempData["ErrorMessage"] = "لم يتغير الطلب: ربما حُدّثت حالته بالفعل أو لم تعد هذه الخطوة متاحة.";
-        }
-        else TempData["SuccessMessage"] = "تم تحديث حالة الطلب بنجاح.";
+        var result = await workflow.TransitionAsync(User, id, from, to, ct);
+        if (result == MutationResult.NotFound) return NotFound();
+        SetFeedback(result);
         return RedirectToAction(nameof(Details), new { id });
     }
+    private void SetFeedback(MutationResult result) => TempData[result == MutationResult.Success ? "SuccessMessage" : "ErrorMessage"] = result == MutationResult.Success
+        ? "تم تحديث الطلب. قبولك يعني استعدادك للعمل؛ يبدأ التنفيذ بعد موافقة العميل على العرض."
+        : "تعذر تنفيذ الخطوة. ربما حُجز الطلب أو تغيرت حالته؛ يلزم الاتفاق قبل البدء وتأكيد العميل للسعر النهائي قبل الإكمال.";
 }

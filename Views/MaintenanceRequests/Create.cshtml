@@ -27,12 +27,13 @@
                 <div id="provider-matches" class="fp-matches" aria-label="اقتراحات المزودين"></div>
                 <noscript><p class="fp-notice">يمكنك إرسال الطلب بدون تعيين، أو اختيار مزود من <a asp-area="" asp-controller="Providers" asp-action="Index">دليل المزودين</a> ثم إنشاء الطلب من ملفه.</p></noscript>
             </section>
-            <section class="fp-form-section fp-submit-section"><h2><span class="fp-step-number">05</span> راجع وأرسل</h2><p>سيبدأ الطلب بحالة «بانتظار القبول». بدون مزود معيّن سيبقى محفوظًا دون توجيه تلقائي؛ يمكنك متابعته من طلباتي.</p><button class="btn fp-btn-gold" type="submit">تسجيل الطلب <i class="bi bi-arrow-left" aria-hidden="true"></i></button></section>
+            <section class="fp-form-section fp-submit-section"><h2><span class="fp-step-number">05</span> راجع وأرسل</h2><p>سيبدأ الطلب بحالة «بانتظار القبول». بدون مزود معيّن سيكون متاحًا لمزود مؤهل في تخصصك ومنطقتك لتوليه وتقديم عرض. يبدأ التنفيذ بعد موافقتك.</p><button class="btn fp-btn-gold" type="submit">تسجيل الطلب <i class="bi bi-arrow-left" aria-hidden="true"></i></button></section>
         </form>
         <aside class="fp-form-aside"><span class="fp-eyebrow">من وصف المشكلة إلى إنجازها</span><h2>كل خطوة واضحة.</h2><ol><li>سجّل المشكلة وحدد المنطقة.</li><li>المزود المعيّن يراجع الطلب ويقبله.</li><li>تابع التنفيذ والصور، ثم قيّم الخدمة بعد اكتمالها.</li></ol><div class="fp-aside-note">اتفقا على نطاق السعر، وتواصلا في محادثة الطلب ووثّقا العمل بالصور. حسابات الدفع محاكاة فقط؛ لا تُجرى دفعات داخل FixPal.</div></aside>
     </div>
 </div>
 @section Scripts { <partial name="_ValidationScriptsPartial" /><script src="~/js/request-diagnosis.js" asp-append-version="true"></script><script src="~/js/request-location.js" asp-append-version="true"></script><script src="~/js/request-create.js" asp-append-version="true"></script> }
+
 
 
 

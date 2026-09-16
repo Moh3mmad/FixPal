@@ -8,6 +8,10 @@ using Microsoft.AspNetCore.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddScoped<FixPal.Services.RequestAccessService>();
+builder.Services.AddScoped<FixPal.Services.RequestMutationService>();
+builder.Services.AddScoped<FixPal.Services.RequestAgreementPolicy>();
+builder.Services.AddScoped<FixPal.Services.RequestWorkflowService>();
+builder.Services.AddScoped<FixPal.Services.RequestDetailsService>();
 builder.Services.AddScoped<FixPal.Services.RequestCommerceService>();
 builder.Services.AddScoped<FixPal.Services.ProviderMatchingService>();
 builder.Services.AddScoped<FixPal.Services.IPrivateMediaStorage, FixPal.Services.LocalPrivateMediaStorage>();

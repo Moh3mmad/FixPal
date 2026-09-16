@@ -6,12 +6,10 @@ namespace FixPal.Services;
 public record ProviderMatch(int Id, string DisplayName, string Reason, double? AverageRating, int ReviewCount);
 public class ProviderMatchingService(ApplicationDbContext db)
 {
-    public async Task<IReadOnlyList<ProviderMatch>> FindAsync(int categoryId, int areaId, string? name, CancellationToken ct)
+    public async Task<IReadOnlyList<ProviderMatch>> FindAsync(int categoryId, int areaId, string? name, CancellationToken ct, string? ownerId = null)
     {
         var now = DateTime.UtcNow;
-        var query = db.ProviderProfiles.AsNoTracking().Where(p => p.ApprovalStatus == ApprovalStatus.Approved
-            && p.ProviderType == ProviderType.Individual && p.ServiceCategoryId == categoryId && p.AreaId == areaId && p.Area!.City.IsActive
-            && db.UserRoles.Any(ur => ur.UserId == p.UserId && db.Roles.Any(r => r.Id == ur.RoleId && r.Name == AppRoles.Provider)));
+        var query = ProviderEligibility.ForRequest(db, categoryId, areaId, ownerId).AsNoTracking();
         if (!string.IsNullOrWhiteSpace(name)) query = query.Where(p => p.DisplayName.Contains(name));
         // Rank only eligible service coverage. No provider coordinates exist, so no distance is fabricated.
         var candidates = await query.Select(p => new { p.Id, p.DisplayName, p.Availability, p.AvailableAfterUtc,
@@ -24,3 +22,4 @@ public class ProviderMatchingService(ApplicationDbContext db)
             (p.Count == 0 ? "لا توجد تقييمات بعد" : $"{p.Rating:0.0}/5 من {p.Count} تقييم"), p.Rating, p.Count)).ToList();
     }
 }
+
