@@ -42,6 +42,7 @@ public class ProviderRequestsController(ApplicationDbContext db, RequestAccessSe
         return model == null ? NotFound() : View("~/Views/MaintenanceRequests/Details.cshtml", model);
     }
     [HttpPost, EnableRateLimiting("writes")]
+    [FixPal.Infrastructure.RequireContactPhone]
     public async Task<IActionResult> Claim(int id, CancellationToken ct)
     {
         var result = await workflow.ClaimAsync(User, id, ct);
@@ -49,7 +50,7 @@ public class ProviderRequestsController(ApplicationDbContext db, RequestAccessSe
         SetFeedback(result);
         return result == MutationResult.Success ? RedirectToAction(nameof(Details), new { id }) : RedirectToAction(nameof(Available));
     }
-    [HttpPost, EnableRateLimiting("writes")] public Task<IActionResult> Accept(int id, CancellationToken ct) => Transition(id, MaintenanceRequestStatus.Pending, MaintenanceRequestStatus.Accepted, ct);
+    [HttpPost, FixPal.Infrastructure.RequireContactPhone, EnableRateLimiting("writes")] public Task<IActionResult> Accept(int id, CancellationToken ct) => Transition(id, MaintenanceRequestStatus.Pending, MaintenanceRequestStatus.Accepted, ct);
     [HttpPost, EnableRateLimiting("writes")] public Task<IActionResult> Start(int id, CancellationToken ct) => Transition(id, MaintenanceRequestStatus.Accepted, MaintenanceRequestStatus.InProgress, ct);
     [HttpPost, EnableRateLimiting("writes")] public Task<IActionResult> Complete(int id, CancellationToken ct) => Transition(id, MaintenanceRequestStatus.InProgress, MaintenanceRequestStatus.Completed, ct);
     private async Task<IActionResult> Transition(int id, MaintenanceRequestStatus from, MaintenanceRequestStatus to, CancellationToken ct)

@@ -16,15 +16,17 @@ namespace FixPal.Controllers
         private readonly ApplicationDbContext _context;
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly ILogger<ProviderApplicationController> _logger;
+        private readonly FixPal.Services.AccountPhoneService _phones;
 
         public ProviderApplicationController(
             ApplicationDbContext context,
             UserManager<ApplicationUser> userManager,
-            ILogger<ProviderApplicationController> logger)
+            ILogger<ProviderApplicationController> logger, FixPal.Services.AccountPhoneService phones)
         {
             _context = context;
             _userManager = userManager;
             _logger = logger;
+            _phones = phones;
         }
 
         [HttpGet]
@@ -97,6 +99,7 @@ namespace FixPal.Controllers
                     "المنطقة المحددة غير موجودة.");
             }
 
+            if (!_phones.TryNormalize(model.PhoneNumber, out var normalized)) ModelState.AddModelError(nameof(model.PhoneNumber), FixPal.Services.AccountPhoneService.ValidationMessage);
             if (!ModelState.IsValid)
             {
                 await LoadDropdownsAsync();
@@ -110,7 +113,7 @@ namespace FixPal.Controllers
             {
                 if (!string.IsNullOrWhiteSpace(model.PhoneNumber))
                 {
-                    var updateUserResult = await _userManager.SetPhoneNumberAsync(user, model.PhoneNumber.Trim());
+                    var updateUserResult = await _userManager.SetPhoneNumberAsync(user, normalized);
 
                     if (!updateUserResult.Succeeded)
                     {

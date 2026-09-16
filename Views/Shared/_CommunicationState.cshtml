@@ -1,0 +1,11 @@
+@model FixPal.Models.ViewModels.CommunicationState
+<section class="fp-detail-panel fp-communication" aria-label="حالة التواصل">
+    <span class="fp-eyebrow">التواصل ضمن الطلب</span>
+    <h2>@Model.Heading</h2>
+    <p>@Model.Explanation</p>
+    <p class="fp-field-hint">@Model.NextAction</p>
+    @if (Model.NeedsPhone)
+    {
+        <a asp-area="Identity" asp-page="/Account/Manage/Index" asp-route-returnUrl="@(Context.Request.Path + Context.Request.QueryString)" class="btn fp-btn-gold">إضافة رقم الهاتف</a>
+    }
+</section>

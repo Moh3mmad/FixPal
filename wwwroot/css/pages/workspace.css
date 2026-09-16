@@ -137,3 +137,15 @@
 .fp-filter-tabs a:hover { transform: translateY(-2px); }
 @media(max-width:767.98px) { .fp-commerce-grid { grid-template-columns: 1fr; } .fp-map { height: 280px; } .fp-location-tools .btn { flex: 1 1 140px; } }
 @media(prefers-reduced-motion:reduce) { .fp-filter-tabs a { transition: none; transform: none; } }
+
+/* Contact and conversation lifecycle */
+.fp-communication,.fp-contact { min-width:0; margin-block:1rem; }
+.fp-contact .btn { min-height:44px; gap:.6rem; max-width:100%; flex-wrap:wrap; }
+.fp-chat { min-width:0; }
+.fp-message { max-width:90%; min-width:0; overflow-wrap:anywhere; margin-inline-end:auto; margin-inline-start:0; }
+.fp-message.mine { margin-inline-start:auto; margin-inline-end:0; }
+.fp-message p { white-space:pre-wrap; overflow-wrap:anywhere; text-align:start; }
+.fp-message-meta { flex-wrap:wrap; gap:.5rem; }
+.fp-message-meta time { direction:ltr; unicode-bidi:isolate; }
+#message-text { min-height:112px; }
+@media(max-width:576px) { .fp-message { max-width:96%; } .fp-communication h2,.fp-contact h2 { font-size:1.15rem; } .fp-chat + .fp-pagination { flex-wrap:wrap; } }

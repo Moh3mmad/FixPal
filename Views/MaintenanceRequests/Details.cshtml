@@ -15,10 +15,11 @@
     <div class="fp-page-heading mt-4"><div><span class="fp-eyebrow">طلب <bdi>#@Model.Id</bdi> · @(Model.RequestType == RequestType.PublicReport ? "بلاغ عن مكان عام" : "صيانة خاصة")</span><h1 class="fp-request-title">@Model.Title</h1><p>@Model.Category <span class="fp-separator">/</span> @Model.Location</p></div><span class="fp-status @Model.Status.ToString().ToLowerInvariant()">@RequestWorkflow.Label(Model.Status)</span></div>
     <partial name="_Flash" />
     @if (Model.Status == MaintenanceRequestStatus.Accepted) { <p class="fp-notice">@(Model.HasAgreement ? "الاتفاق مؤكد. يمكن للمزود بدء التنفيذ." : "المزود مستعد للعمل. يلزم قبول عرض محدد قبل بدء التنفيذ.")</p> }
-    <div class="fp-filter-tabs"><a asp-area="" asp-controller="RequestMessages" asp-action="Index" asp-route-id="@Model.Id">محادثة الطلب</a><a asp-area="" asp-controller="RequestEvidence" asp-action="Index" asp-route-id="@Model.Id">صور قبل وبعد</a></div>
+    <div class="fp-filter-tabs">@if (Model.Communication.IsPrivate) { <a asp-area="" asp-controller="RequestMessages" asp-action="Index" asp-route-id="@Model.Id">محادثة الطلب</a> }<a asp-area="" asp-controller="RequestEvidence" asp-action="Index" asp-route-id="@Model.Id">صور قبل وبعد</a></div>
 
 
 
+    @if (Model.Communication.IsPrivate) { <div class="fp-commerce-grid"><partial name="_CommunicationState" model="Model.Communication" /><partial name="_RequestContact" model="Model.Communication" /></div> }
     <section class="fp-tracking" aria-label="تتبع الطلب"><div class="fp-section-heading"><h2>من الطلب إلى الإنجاز</h2><span>آخر حالة مسجلة</span></div>
         <ol class="fp-timeline">@for (var i = 0; i < steps.Length; i++) { var done = Model.Status != MaintenanceRequestStatus.Cancelled && (int)Model.Status >= (int)steps[i]; <li class="@(done ? "reached" : "") @(Model.Status == steps[i] ? "current" : "")" aria-current="@(Model.Status == steps[i] ? "step" : null)"><span class="fp-timeline-dot">@(done ? "✓" : (i + 1).ToString())</span><strong>@RequestWorkflow.Label(steps[i])</strong>@if (dates[i].HasValue) { <time data-utc="@dates[i]!.Value.ToString("yyyy-MM-ddTHH:mm:ssZ")">@dates[i]!.Value.ToString("yyyy/MM/dd HH:mm") UTC</time> } else { <span class="fp-time-placeholder">لم تبدأ بعد</span> }</li> }</ol>
     </section>

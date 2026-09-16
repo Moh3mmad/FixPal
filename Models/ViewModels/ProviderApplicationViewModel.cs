@@ -22,8 +22,8 @@ namespace FixPal.Models.ViewModels
         [Display(Name = "نبذة عنك")]
         public string? Description { get; set; }
 
-        [Phone(ErrorMessage = "رقم الهاتف غير صحيح.")]
-        [StringLength(30)]
+        [Required(ErrorMessage = "أدخل رقم هاتف للتواصل.")]
+        [StringLength(40, ErrorMessage = "رقم الهاتف طويل جدًا.")]
         [Display(Name = "رقم الهاتف")]
         public string? PhoneNumber { get; set; }
     }

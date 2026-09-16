@@ -1,0 +1,19 @@
+@page
+@model FixPal.Areas.Identity.Pages.Account.Manage.IndexModel
+@{ ViewData["Title"] = "رقم الهاتف والتواصل"; }
+<section class="fp-auth">
+    <span class="fp-eyebrow">حسابك</span><h1>رقم الهاتف والتواصل</h1>
+    <partial name="_Flash" />
+    <p>@(string.IsNullOrEmpty(Model.Input.PhoneNumber) ? "لم تضف رقم هاتف بعد." : "رقمك محفوظ للتواصل. إدخال الرقم لا يعني التحقق من ملكيته.")</p>
+    <p>يظهر رقمك للطرف الآخر في طلب الصيانة الخاص بعد الاتفاق على العرض فقط.</p>
+    <form method="post" asp-route-returnUrl="@Model.ReturnUrl">
+        <div asp-validation-summary="ModelOnly" class="text-danger" role="alert"></div>
+        <label asp-for="Input.PhoneNumber" class="form-label"></label>
+        <input asp-for="Input.PhoneNumber" type="tel" dir="ltr" autocomplete="tel" class="form-control" aria-describedby="phone-help" />
+        <span asp-validation-for="Input.PhoneNumber" class="text-danger"></span>
+        <p id="phone-help" class="fp-field-hint">استخدم رمز الدولة للرقم الدولي، أو أدخل رقمك المحلي الفلسطيني. لا نرسل رمز تحقق في هذه المرحلة.</p>
+        <button type="submit" class="btn fp-btn-gold">حفظ الرقم والمتابعة</button>
+        <a href="@Model.ReturnUrl" class="btn fp-btn-ghost">العودة</a>
+    </form>
+</section>
+@section Scripts { <partial name="_ValidationScriptsPartial" /> }

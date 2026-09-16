@@ -37,7 +37,7 @@ public class MaintenanceRequestsController(ApplicationDbContext db, UserManager<
         await LoadOptions(model, ct);
         return View(model);
     }
-    [HttpPost, Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("writes")]
+    [HttpPost, FixPal.Infrastructure.RequireContactPhone, Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("writes")]
     public async Task<IActionResult> Create(CreateMaintenanceRequestViewModel model, CancellationToken ct)
     {
         var user = await users.GetUserAsync(User);

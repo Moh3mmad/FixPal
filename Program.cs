@@ -7,6 +7,8 @@ using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Services.AddScoped<FixPal.Services.AccountPhoneService>();
+builder.Services.AddScoped<FixPal.Services.RequestCommunicationPolicy>();
 builder.Services.AddScoped<FixPal.Services.RequestAccessService>();
 builder.Services.AddScoped<FixPal.Services.RequestMutationService>();
 builder.Services.AddScoped<FixPal.Services.RequestAgreementPolicy>();

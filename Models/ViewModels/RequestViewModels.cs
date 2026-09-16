@@ -21,6 +21,7 @@ public class RequestSummaryViewModel
 }
 public class RequestDetailsViewModel : RequestSummaryViewModel
 {
+    public CommunicationState Communication { get; set; } = new();
     public bool IsLegacy { get; set; }
     public bool HasAgreement { get; set; }
     public bool CanReview { get; set; }

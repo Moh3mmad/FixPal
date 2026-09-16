@@ -9,9 +9,11 @@ namespace FixPal.Controllers;
 public class RequestQuotesController(RequestCommerceService commerce) : Controller
 {
     [HttpPost]
+    [FixPal.Infrastructure.RequireContactPhone]
     public async Task<IActionResult> Submit(int id, QuoteInputModel input, CancellationToken ct) =>
         Result(id, ModelState.IsValid ? await commerce.SubmitQuoteAsync(User, id, input, ct) : MutationResult.Conflict);
     [HttpPost]
+    [FixPal.Infrastructure.RequireContactPhone]
     public Task<IActionResult> Accept(int id, int revisionNumber, CancellationToken ct) => Decide(id, revisionNumber, QuoteState.Accepted, null, ct);
     [HttpPost]
     public Task<IActionResult> Reject(int id, int revisionNumber, string? note, CancellationToken ct) => Decide(id, revisionNumber, QuoteState.Rejected, note, ct);

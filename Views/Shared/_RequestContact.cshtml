@@ -1,0 +1,9 @@
+@model FixPal.Models.ViewModels.CommunicationState
+<section class="fp-detail-panel fp-contact" aria-label="معلومات الاتصال">
+    <span class="fp-eyebrow">اتصال خاص</span><h2>@(Model.ContactPhone == null ? "معلومات التواصل" : Model.ContactLabel)</h2>
+    <p>@Model.ContactExplanation</p>
+    @if (Model.ContactPhone != null)
+    {
+        <a href="tel:@Model.ContactPhone" class="btn fp-btn-ghost"><i class="bi bi-telephone" aria-hidden="true"></i> <bdi dir="ltr">@Model.ContactPhone</bdi><span class="visually-hidden">اتصال</span></a>
+    }
+</section>

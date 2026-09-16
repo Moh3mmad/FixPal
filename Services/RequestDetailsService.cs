@@ -5,13 +5,14 @@ using FixPal.Models.Enums;
 using FixPal.Models.ViewModels;
 using Microsoft.EntityFrameworkCore;
 namespace FixPal.Services;
-public class RequestDetailsService(ApplicationDbContext db, RequestAccessService access, RequestAgreementPolicy agreement)
+public class RequestDetailsService(ApplicationDbContext db, RequestAccessService access, RequestAgreementPolicy agreement, RequestCommunicationPolicy communication)
 {
     public async Task<RequestDetailsViewModel?> GetAsync(ClaimsPrincipal user, int id, int quotePage, CancellationToken ct)
     {
         var grant = await access.GetAsync(user, id, ct);
         if (grant == null) return null;
         var model = await db.MaintenanceRequests.AsNoTracking().Where(r => r.Id == id).Select(RequestDetailsViewModel.DetailProjection).SingleAsync(ct);
+        model.Communication = await communication.GetAsync(grant, user, ct);
         model.IsOwner = grant.IsOwner;
         model.CanManage = grant.IsProvider && !grant.IsOwner
             && await ProviderEligibility.ForRequest(db, grant.Request.ServiceCategoryId, grant.Request.AreaId, grant.Request.CustomerId).AnyAsync(p => p.Id == grant.Request.ProviderProfileId, ct);

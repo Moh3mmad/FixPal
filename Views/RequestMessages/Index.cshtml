@@ -1,12 +1,13 @@
 @model FixPal.Models.ViewModels.RequestMessagesViewModel
 @{ ViewData["Title"] = "محادثة الطلب"; }
 <div class="container fp-workspace" style="max-width:900px"><a asp-area="" asp-controller="MaintenanceRequests" asp-action="Details" asp-route-id="@Model.RequestId" class="fp-text-link">تفاصيل الطلب</a><div class="fp-page-heading mt-4"><div><span class="fp-eyebrow">محادثة خاصة · طلب #@Model.RequestId</span><h1>@Model.Title</h1><p>التواصل محفوظ ضمن الطلب. حدّث الصفحة لقراءة الرسائل الجديدة.</p></div><a asp-action="Index" asp-route-id="@Model.RequestId" class="btn fp-btn-ghost">تحديث</a></div><partial name="_Flash" />
+<partial name="_CommunicationState" model="Model.Communication" />
 <section class="fp-chat" aria-label="رسائل الطلب">
-@if (Model.Messages.Items.Count == 0) { <div class="fp-empty"><h2>ابدأ بتوضيح التفاصيل.</h2><p>رسالة قصيرة تساعدكما على الاتفاق على وقت العمل وما يلزم تحضيره.</p></div> }
+@if (Model.Communication.CanReadHistory && Model.Messages.Items.Count == 0) { <div class="fp-empty"><h2>لا توجد رسائل محفوظة.</h2><p>@(Model.CanSend ? "يمكنك إرسال رسالة لتوضيح تفاصيل الخدمة." : "ستبقى الرسائل المحفوظة هنا للرجوع إليها.")</p></div> }
 @foreach (var message in Model.Messages.Items.Reverse())
-{ <article class="fp-message @(message.IsMine ? "mine" : "")"><div class="fp-message-meta"><strong>@(message.IsMine ? "أنت" : message.IsCustomer ? "صاحب الطلب" : "مزود الخدمة")</strong><time data-utc="@message.CreatedAtUtc.ToString("yyyy-MM-ddTHH:mm:ssZ")">@message.CreatedAtUtc.ToString("u")</time></div><p>@message.Text</p></article> }
+{ <article class="fp-message @(message.IsMine ? "mine" : "")"><div class="fp-message-meta"><strong>@(message.IsMine ? "أنت" : message.IsCustomer ? "صاحب الطلب" : "مزود الخدمة")</strong><time data-utc="@message.CreatedAtUtc.ToString("yyyy-MM-ddTHH:mm:ssZ")">@message.CreatedAtUtc.ToString("u")</time></div><p dir="auto">@message.Text</p></article> }
 </section><nav class="fp-pagination">@if(Model.Messages.Page < Model.Messages.TotalPages) { <a asp-action="Index" asp-route-id="@Model.RequestId" asp-route-page="@(Model.Messages.Page + 1)">رسائل أقدم</a> }<span>صفحة @Model.Messages.Page من @Model.Messages.TotalPages</span>@if(Model.Messages.Page > 1) { <a asp-action="Index" asp-route-id="@Model.RequestId" asp-route-page="@(Model.Messages.Page - 1)">رسائل أحدث</a> }</nav>
 @if (Model.CanSend) { <form asp-action="Send" asp-route-id="@Model.RequestId" method="post" class="fp-detail-panel"><label for="message-text" class="form-label">رسالتك</label><textarea id="message-text" name="text" maxlength="2000" required rows="3" class="form-control"></textarea><p class="fp-field-hint">لا تشارك كلمات المرور أو بيانات الدفع. الرسائل متاحة للمشاركين والإدارة للمراجعة.</p><button class="btn fp-btn-gold" type="submit">إرسال الرسالة</button></form> }
-else { <p class="fp-notice">المراسلة غير متاحة قبل الاتفاق أو بعد إغلاق الطلب. العرض الإداري للقراءة فقط.</p> }
+
 </div>
 
