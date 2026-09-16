@@ -34,8 +34,8 @@
                     <label for="decision-note" class="form-label">ملاحظة للمزود (اختياري)</label>
                     <textarea id="decision-note" name="note" maxlength="500" rows="2" class="form-control mb-3"></textarea>
                     <div class="d-flex flex-wrap gap-2">
-                        <button asp-action="RequestRevision" class="btn fp-btn-navy" type="submit">طلب تعديل العرض</button>
-                        <button asp-action="Reject" class="btn fp-btn-ghost" type="submit">رفض العرض</button>
+                        <button asp-controller="RequestQuotes" asp-action="RequestRevision" asp-route-id="@Model.Id" class="btn fp-btn-navy" type="submit">طلب تعديل العرض</button>
+                        <button asp-controller="RequestQuotes" asp-action="Reject" asp-route-id="@Model.Id" class="btn fp-btn-ghost" type="submit">رفض العرض</button>
                     </div>
                 </form>
             }
