@@ -9,9 +9,14 @@ namespace FixPal.Services;
 public class RequestWorkflowService(ApplicationDbContext db, RequestAccessService access,
     RequestMutationService mutations, RequestAgreementPolicy agreement)
 {
-    public IQueryable<MaintenanceRequest> Claimable(int providerId, string userId) => db.MaintenanceRequests.Where(r =>
-        r.RequestType == RequestType.PrivateService && r.Status == MaintenanceRequestStatus.Pending && r.ProviderProfileId == null
-        && r.CustomerId != userId && ProviderEligibility.ForRequest(db, r.ServiceCategoryId, r.AreaId, r.CustomerId).Any(p => p.Id == providerId));
+    public IQueryable<MaintenanceRequest> Claimable(int providerId, string userId)
+    {
+        var eligibleProviders = ProviderEligibility.Active(db).Where(p => p.Id == providerId && p.UserId == userId);
+        return db.MaintenanceRequests.Where(r =>
+            r.RequestType == RequestType.PrivateService && r.Status == MaintenanceRequestStatus.Pending && r.ProviderProfileId == null
+            && r.CustomerId != userId && eligibleProviders.Any(p => p.ServiceCategoryId == r.ServiceCategoryId
+                && p.AreaId == r.AreaId && p.UserId != r.CustomerId));
+    }
 
     public Task<MutationResult> ClaimAsync(ClaimsPrincipal user, int id, CancellationToken ct) => mutations.RunAsync(id, async () =>
     {

@@ -72,7 +72,9 @@ public static class ImageUploadValidation
             if (normalized.Length > MaxBytes) throw new InvalidDataException("الصورة بعد المعالجة أكبر من 5 ميغابايت.");
             return new(normalized.ToArray(), format.Name == "PNG" ? "image/png" : "image/jpeg");
         }
-        catch (Exception ex) when (ex is UnknownImageFormatException or InvalidImageContentException or NotSupportedException)
+        // ImageSharp's JPEG decoder can also throw NullReferenceException for a
+        // truncated stream without a frame header. Treat this as invalid input.
+        catch (Exception ex) when (ex is UnknownImageFormatException or InvalidImageContentException or NotSupportedException or NullReferenceException)
         {
             throw new InvalidDataException("تعذر قراءة الصورة. اختر ملف PNG أو JPEG سليمًا.", ex);
         }
