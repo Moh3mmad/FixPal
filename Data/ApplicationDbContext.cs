@@ -24,6 +24,10 @@ namespace FixPal.Data
         public DbSet<ProviderReview> ProviderReviews { get; set; }
         public DbSet<ServiceCategory> ServiceCategories { get; set; }
         public DbSet<ProviderProfile> ProviderProfiles { get; set; }
+        public DbSet<ProviderCalendar> ProviderCalendars { get; set; }
+        public DbSet<ProviderWorkingPeriod> ProviderWorkingPeriods { get; set; }
+        public DbSet<ProviderBlackout> ProviderBlackouts { get; set; }
+        public DbSet<Appointment> Appointments { get; set; }
 
         private void ProtectQuoteHistory()
         {
@@ -48,6 +52,95 @@ namespace FixPal.Data
         protected override void OnModelCreating(ModelBuilder builder)
         {
             base.OnModelCreating(builder);
+
+            var calendar = builder.Entity<ProviderCalendar>();
+            calendar.HasKey(c => c.ProviderProfileId);
+            calendar.HasOne(c => c.ProviderProfile).WithOne()
+                .HasForeignKey<ProviderCalendar>(c => c.ProviderProfileId).IsRequired().OnDelete(DeleteBehavior.Restrict);
+            calendar.Property(c => c.TimeZoneId).IsRequired().HasMaxLength(100);
+            calendar.Property(c => c.UpdatedAtUtc).HasColumnType("datetimeoffset(7)");
+            calendar.Property(c => c.RowVersion).IsRowVersion();
+            calendar.ToTable("ProviderCalendars", t =>
+            {
+                t.HasCheckConstraint("CK_ProviderCalendars_TimeZone", "LEN(LTRIM(RTRIM([TimeZoneId]))) > 0");
+                t.HasCheckConstraint("CK_ProviderCalendars_UpdatedAtUtc", "DATEPART(TZOFFSET, [UpdatedAtUtc]) = 0");
+            });
+
+            var workingPeriod = builder.Entity<ProviderWorkingPeriod>();
+            workingPeriod.HasKey(p => p.Id);
+            workingPeriod.HasOne(p => p.ProviderCalendar).WithMany()
+                .HasForeignKey(p => p.ProviderProfileId).IsRequired().OnDelete(DeleteBehavior.Restrict);
+            workingPeriod.Property(p => p.DayOfWeek).HasConversion<int>();
+            workingPeriod.Property(p => p.StartLocal).HasColumnType("time(0)");
+            workingPeriod.Property(p => p.EndLocal).HasColumnType("time(0)");
+            workingPeriod.HasIndex(p => new { p.ProviderProfileId, p.DayOfWeek, p.StartLocal, p.EndLocal })
+                .IsUnique().HasDatabaseName("UX_ProviderWorkingPeriods_Interval");
+            workingPeriod.ToTable("ProviderWorkingPeriods", t =>
+            {
+                t.HasCheckConstraint("CK_ProviderWorkingPeriods_Day", "[DayOfWeek] BETWEEN 0 AND 6");
+                t.HasCheckConstraint("CK_ProviderWorkingPeriods_Interval", "[StartLocal] < [EndLocal]");
+            });
+
+            var blackout = builder.Entity<ProviderBlackout>();
+            blackout.HasKey(b => b.Id);
+            blackout.HasOne(b => b.ProviderCalendar).WithMany()
+                .HasForeignKey(b => b.ProviderProfileId).IsRequired().OnDelete(DeleteBehavior.Restrict);
+            blackout.HasOne<ApplicationUser>().WithMany()
+                .HasForeignKey(b => b.CreatedByUserId).IsRequired().OnDelete(DeleteBehavior.Restrict);
+            blackout.HasOne<ApplicationUser>().WithMany()
+                .HasForeignKey(b => b.RemovedByUserId).IsRequired(false).OnDelete(DeleteBehavior.Restrict);
+            blackout.Property(b => b.StartUtc).HasColumnType("datetimeoffset(7)");
+            blackout.Property(b => b.EndUtc).HasColumnType("datetimeoffset(7)");
+            blackout.Property(b => b.CreatedAtUtc).HasColumnType("datetimeoffset(7)");
+            blackout.Property(b => b.RemovedAtUtc).HasColumnType("datetimeoffset(7)").IsRequired(false);
+            blackout.HasIndex(b => new { b.ProviderProfileId, b.StartUtc })
+                .HasDatabaseName("IX_ProviderBlackouts_ActiveInterval")
+                .IncludeProperties(b => b.EndUtc).HasFilter("[RemovedAtUtc] IS NULL");
+            blackout.ToTable("ProviderBlackouts", t =>
+            {
+                t.HasCheckConstraint("CK_ProviderBlackouts_Interval", "[StartUtc] < [EndUtc]");
+                t.HasCheckConstraint("CK_ProviderBlackouts_Removal", "([RemovedAtUtc] IS NULL AND [RemovedByUserId] IS NULL) OR ([RemovedAtUtc] IS NOT NULL AND [RemovedByUserId] IS NOT NULL)");
+                t.HasCheckConstraint("CK_ProviderBlackouts_Utc", "DATEPART(TZOFFSET, [StartUtc]) = 0 AND DATEPART(TZOFFSET, [EndUtc]) = 0 AND DATEPART(TZOFFSET, [CreatedAtUtc]) = 0 AND ([RemovedAtUtc] IS NULL OR DATEPART(TZOFFSET, [RemovedAtUtc]) = 0)");
+            });
+
+            var appointment = builder.Entity<Appointment>();
+            appointment.HasKey(a => a.Id);
+            appointment.HasOne(a => a.MaintenanceRequest).WithMany()
+                .HasForeignKey(a => a.MaintenanceRequestId).IsRequired().OnDelete(DeleteBehavior.Restrict);
+            appointment.HasOne(a => a.ProviderCalendar).WithMany()
+                .HasForeignKey(a => a.ProviderProfileId).IsRequired().OnDelete(DeleteBehavior.Restrict);
+            appointment.HasOne<ApplicationUser>().WithMany()
+                .HasForeignKey(a => a.CreatedByUserId).IsRequired().OnDelete(DeleteBehavior.Restrict);
+            appointment.HasOne<ApplicationUser>().WithMany()
+                .HasForeignKey(a => a.ClosedByUserId).IsRequired(false).OnDelete(DeleteBehavior.Restrict);
+            appointment.HasOne(a => a.ReplacesAppointment).WithMany()
+                .HasForeignKey(a => a.ReplacesAppointmentId).IsRequired(false).OnDelete(DeleteBehavior.Restrict);
+            appointment.Property(a => a.StartUtc).HasColumnType("datetimeoffset(7)");
+            appointment.Property(a => a.EndUtc).HasColumnType("datetimeoffset(7)");
+            appointment.Property(a => a.CreatedAtUtc).HasColumnType("datetimeoffset(7)");
+            appointment.Property(a => a.ClosedAtUtc).HasColumnType("datetimeoffset(7)").IsRequired(false);
+            appointment.Property(a => a.TimeZoneId).IsRequired().HasMaxLength(100);
+            appointment.Property(a => a.Status).HasConversion<int>();
+            appointment.Property(a => a.RowVersion).IsRowVersion();
+            appointment.HasIndex(a => a.MaintenanceRequestId).IsUnique()
+                .HasDatabaseName("UX_Appointments_ActiveRequest").HasFilter("[Status] IN (1, 2)");
+            appointment.HasIndex(a => a.ReplacesAppointmentId).IsUnique()
+                .HasDatabaseName("UX_Appointments_Replacement").HasFilter("[ReplacesAppointmentId] IS NOT NULL");
+            appointment.HasIndex(a => new { a.ProviderProfileId, a.StartUtc })
+                .HasDatabaseName("IX_Appointments_ProviderInterval")
+                .IncludeProperties(a => new { a.EndUtc, a.Status, a.MaintenanceRequestId });
+            appointment.HasIndex(a => new { a.MaintenanceRequestId, a.CreatedAtUtc, a.Id })
+                .HasDatabaseName("IX_Appointments_RequestHistory");
+            appointment.ToTable("Appointments", t =>
+            {
+                t.HasCheckConstraint("CK_Appointments_Interval", "[StartUtc] < [EndUtc]");
+                t.HasCheckConstraint("CK_Appointments_Status", "[Status] IN (1, 2, 3, 4, 5)");
+                t.HasCheckConstraint("CK_Appointments_Closure", "([Status] IN (1, 2) AND [ClosedAtUtc] IS NULL AND [ClosedByUserId] IS NULL) OR ([Status] IN (3, 4, 5) AND [ClosedAtUtc] IS NOT NULL AND [ClosedByUserId] IS NOT NULL)");
+                t.HasCheckConstraint("CK_Appointments_Utc", "DATEPART(TZOFFSET, [StartUtc]) = 0 AND DATEPART(TZOFFSET, [EndUtc]) = 0 AND DATEPART(TZOFFSET, [CreatedAtUtc]) = 0 AND ([ClosedAtUtc] IS NULL OR DATEPART(TZOFFSET, [ClosedAtUtc]) = 0)");
+                t.HasCheckConstraint("CK_Appointments_TimeZone", "LEN(LTRIM(RTRIM([TimeZoneId]))) > 0");
+                t.HasCheckConstraint("CK_Appointments_Replacement", "[ReplacesAppointmentId] IS NULL OR [ReplacesAppointmentId] <> [Id]");
+            });
+
             var review = builder.Entity<ProviderReview>();
             review.HasIndex(r => r.MaintenanceRequestId).IsUnique();
             review.HasIndex(r => new { r.ProviderProfileId, r.CreatedAtUtc, r.Id });
