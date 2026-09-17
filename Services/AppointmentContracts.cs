@@ -5,6 +5,18 @@ public sealed record ScheduleAppointmentCommand(
     DateTime StartLocal,
     DateTime EndLocal);
 
+public sealed record RescheduleAppointmentCommand(
+    int MaintenanceRequestId,
+    int AppointmentId,
+    DateTime StartLocal,
+    DateTime EndLocal,
+    string? ExpectedAppointmentRowVersion);
+
+public sealed record CancelAppointmentCommand(
+    int MaintenanceRequestId,
+    int AppointmentId,
+    string? ExpectedAppointmentRowVersion);
+
 public enum AppointmentResultStatus
 {
     Success = 0,
