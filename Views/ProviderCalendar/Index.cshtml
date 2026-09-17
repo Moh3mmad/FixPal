@@ -1,37 +1,16 @@
 @model FixPal.Models.ViewModels.ProviderCalendarPageViewModel
 @using FixPal.Services
+@using FixPal.Models.ViewModels
 @{
     ViewData["Title"] = "تقويم العمل";
     var dayLabels = new[] { "الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت" };
 }
-@functions {
-    private static DateTimeOffset ToCalendarTime(DateTimeOffset value, string timeZoneId)
-    {
-        try
-        {
-            return TimeZoneInfo.ConvertTime(value, TimeZoneInfo.FindSystemTimeZoneById(timeZoneId));
-        }
-        catch (TimeZoneNotFoundException)
-        {
-            return value.ToUniversalTime();
-        }
-        catch (InvalidTimeZoneException)
-        {
-            return value.ToUniversalTime();
-        }
-        catch (ArgumentException)
-        {
-            return value.ToUniversalTime();
-        }
-    }
-}
-
-<div class="container fp-workspace" dir="rtl">
+<div class="container fp-workspace fp-calendar-page" dir="rtl">
     <div class="fp-page-heading">
         <div>
             <span class="fp-eyebrow">إدارة المواعيد</span>
             <h1>تقويم العمل</h1>
-            <p>حدّد المنطقة الزمنية وساعات العمل وفترات عدم التوفر.</p>
+            <p>نظّم أسبوعك وحدّد الأوقات التي تناسبك لاستقبال مواعيد الصيانة.</p>
         </div>
     </div>
     <partial name="_Flash" />
@@ -41,19 +20,19 @@
         <section class="fp-detail-panel">
             <h2>إنشاء تقويم العمل</h2>
             <form asp-area="" asp-controller="ProviderCalendar" asp-action="Create" method="post" data-calendar-form>
-                <label class="form-label" for="create-time-zone">معرّف المنطقة الزمنية</label>
-                <input class="form-control" id="create-time-zone" name="TimeZoneId" value="Asia/Hebron" maxlength="100" required dir="ltr" />
+                <label class="form-label" for="create-time-zone">المنطقة الزمنية للعمل</label>
+                <input class="form-control" id="create-time-zone" name="TimeZoneId" value="Asia/Hebron" maxlength="100" required dir="ltr" list="calendar-zones" /><p class="fp-field-hint">لفلسطين استخدم <bdi>Asia/Hebron</bdi>. للعمل في منطقة أخرى، أدخل معرّف توقيتها.</p>
                 <div class="form-check mt-3">
                     <input class="form-check-input" id="create-enabled" name="IsEnabled" type="checkbox" value="true" checked />
                     <input name="IsEnabled" type="hidden" value="false" />
                     <label class="form-check-label" for="create-enabled">السماح بحجوزات جديدة</label>
                 </div>
-                <h3 class="mt-4">ساعات العمل الأسبوعية</h3>
+                <h3 class="mt-4">ساعات العمل الأسبوعية</h3><p class="fp-field-hint">أضف أيام العمل وساعاتها. يمكنك إضافة أكثر من فترة لليوم نفسه، مثل فترة صباحية وأخرى مسائية.</p>
                 <div data-period-list>
-                    <div class="row g-2 align-items-end mb-2" data-period-row>
-                        <div class="col-md-4"><label class="form-label">اليوم</label><select class="form-select" data-field="DayOfWeek"><option value="0">الأحد</option><option value="1" selected>الاثنين</option><option value="2">الثلاثاء</option><option value="3">الأربعاء</option><option value="4">الخميس</option><option value="5">الجمعة</option><option value="6">السبت</option></select></div>
-                        <div class="col-md-3"><label class="form-label">من</label><input class="form-control" data-field="StartLocal" type="time" step="60" value="09:00" required /></div>
-                        <div class="col-md-3"><label class="form-label">إلى</label><input class="form-control" data-field="EndLocal" type="time" step="60" value="17:00" required /></div>
+                    <div class="row g-2 align-items-end fp-working-period" data-period-row>
+                        <div class="col-md-4"><label class="form-label">اليوم</label><select class="form-select" name="WorkingPeriods[0].DayOfWeek" data-field="DayOfWeek" aria-label="يوم العمل"><option value="0">الأحد</option><option value="1" selected>الاثنين</option><option value="2">الثلاثاء</option><option value="3">الأربعاء</option><option value="4">الخميس</option><option value="5">الجمعة</option><option value="6">السبت</option></select></div>
+                        <div class="col-md-3"><label class="form-label">من</label><input class="form-control" name="WorkingPeriods[0].StartLocal" data-field="StartLocal" aria-label="بداية فترة العمل" type="time" step="60" value="09:00" required /></div>
+                        <div class="col-md-3"><label class="form-label">إلى</label><input class="form-control" name="WorkingPeriods[0].EndLocal" data-field="EndLocal" aria-label="نهاية فترة العمل" type="time" step="60" value="17:00" required /></div>
                         <div class="col-md-2"><button class="btn btn-outline-danger" type="button" data-remove-period>إزالة</button></div>
                     </div>
                 </div>
@@ -65,8 +44,8 @@
     else
     {
         <section class="fp-detail-panel">
-            <h2>إعدادات التقويم</h2>
-            <p>المنطقة الحالية: <bdi>@Model.Calendar.TimeZoneId</bdi> · @(Model.Calendar.IsEnabled ? "مفعّل" : "متوقف")</p>
+            <h2>أسبوع العمل</h2>
+            <p class="fp-calendar-state"><span class="fp-status @(Model.Calendar.IsEnabled ? "accepted" : "cancelled")">@(Model.Calendar.IsEnabled ? "يستقبل مواعيد جديدة" : "الحجوزات الجديدة متوقفة")</span><span>الأوقات حسب <bdi>@SchedulingDisplay.ZoneLabel(Model.Calendar.TimeZoneId)</bdi></span></p><p class="fp-field-hint">إيقاف الحجوزات الجديدة لا يلغي المواعيد الموجودة.</p>
             <form asp-area="" asp-controller="ProviderCalendar" asp-action="Update" method="post" data-calendar-form>
                 <input type="hidden" name="ExpectedRowVersion" value="@Model.Calendar.RowVersion" />
                 <label class="form-label" for="update-time-zone">معرّف المنطقة الزمنية</label>
@@ -81,18 +60,18 @@
                     @for (var i = 0; i < Model.Calendar.WorkingPeriods.Count; i++)
                     {
                         var period = Model.Calendar.WorkingPeriods[i];
-                        <div class="row g-2 align-items-end mb-2" data-period-row>
+                        <div class="row g-2 align-items-end fp-working-period" data-period-row>
                             <div class="col-md-4">
                                 <label class="form-label">اليوم</label>
-                                <select class="form-select" data-field="DayOfWeek">
+                                <select class="form-select" name="WorkingPeriods[@i].DayOfWeek" data-field="DayOfWeek" aria-label="يوم العمل">
                                     @for (var day = 0; day < dayLabels.Length; day++)
                                     {
                                         <option value="@day" selected="@((int)period.DayOfWeek == day)">@dayLabels[day]</option>
                                     }
                                 </select>
                             </div>
-                            <div class="col-md-3"><label class="form-label">من</label><input class="form-control" data-field="StartLocal" type="time" step="60" value="@period.StartLocal.ToString("HH:mm")" required /></div>
-                            <div class="col-md-3"><label class="form-label">إلى</label><input class="form-control" data-field="EndLocal" type="time" step="60" value="@period.EndLocal.ToString("HH:mm")" required /></div>
+                            <div class="col-md-3"><label class="form-label">من</label><input class="form-control" name="WorkingPeriods[@i].StartLocal" data-field="StartLocal" aria-label="بداية فترة العمل" type="time" step="60" value="@period.StartLocal.ToString("HH:mm")" required /></div>
+                            <div class="col-md-3"><label class="form-label">إلى</label><input class="form-control" name="WorkingPeriods[@i].EndLocal" data-field="EndLocal" aria-label="نهاية فترة العمل" type="time" step="60" value="@period.EndLocal.ToString("HH:mm")" required /></div>
                             <div class="col-md-2"><button class="btn btn-outline-danger" type="button" data-remove-period>إزالة</button></div>
                         </div>
                     }
@@ -103,7 +82,7 @@
         </section>
 
         <section class="fp-detail-panel mt-4">
-            <h2>فترات عدم التوفر</h2>
+            <h2>فترات عدم التوفر</h2><p class="fp-field-hint">إجازة أو التزام آخر؟ احجب الفترة من الحجوزات الجديدة. لا يمكن حجب وقت يتعارض مع عمل محجوز.</p>
             @if (Model.BlackoutManagement == null)
             {
                 <p class="fp-notice">تعذر تحميل سجل فترات عدم التوفر.</p>
@@ -116,22 +95,21 @@
                         <div class="col-md-6"><label class="form-label" for="blackout-start">البداية</label><input class="form-control" id="blackout-start" name="StartLocal" type="datetime-local" step="60" required /></div>
                         <div class="col-md-6"><label class="form-label" for="blackout-end">النهاية</label><input class="form-control" id="blackout-end" name="EndLocal" type="datetime-local" step="60" required /></div>
                     </div>
-                    <p class="fp-field-hint mt-2">تُفسّر الأوقات وفق منطقة تقويمك: <bdi>@Model.Calendar.TimeZoneId</bdi>.</p>
+                    <p class="fp-field-hint mt-2">اختر الأوقات حسب <bdi>@SchedulingDisplay.ZoneLabel(Model.Calendar.TimeZoneId)</bdi>، وليس توقيت جهازك.</p>
                     <button class="btn fp-btn-gold" type="submit">إضافة فترة عدم توفر</button>
                 </form>
 
                 @if (Model.BlackoutManagement.Blackouts.Count > 0)
                 {
-                    <ul class="mt-4">
+                    <ul class="fp-blackout-list">
                         @foreach (var blackout in Model.BlackoutManagement.Blackouts)
                         {
-                            var start = ToCalendarTime(blackout.StartUtc, Model.Calendar.TimeZoneId);
-                            var end = ToCalendarTime(blackout.EndUtc, Model.Calendar.TimeZoneId);
+
                             <li class="mb-3">
-                                <strong>@(blackout.IsRemoved ? "سجل مُزال" : "فترة نشطة")</strong> —
-                                <time datetime="@blackout.StartUtc.ToString("O")">@start.ToString("yyyy/MM/dd HH:mm")</time>
+                                <span class="fp-status @(blackout.IsRemoved ? "superseded" : "pending")">@(blackout.IsRemoved ? "أُزيل الحظر" : "غير متاح")</span> —
+                                <time datetime="@blackout.StartUtc.ToString("O")">@SchedulingDisplay.Format(blackout.StartUtc, Model.Calendar.TimeZoneId)</time>
                                 إلى
-                                <time datetime="@blackout.EndUtc.ToString("O")">@end.ToString("yyyy/MM/dd HH:mm")</time>
+                                <time datetime="@blackout.EndUtc.ToString("O")">@SchedulingDisplay.Format(blackout.EndUtc, Model.Calendar.TimeZoneId)</time>
                                 @if (!blackout.IsRemoved)
                                 {
                                     <form asp-area="" asp-controller="ProviderCalendar" asp-action="RemoveBlackout" method="post" class="d-inline">
@@ -149,11 +127,12 @@
     }
 </div>
 
+<datalist id="calendar-zones"><option value="Asia/Hebron">توقيت فلسطين</option><option value="Asia/Amman">توقيت الأردن</option><option value="Asia/Beirut">توقيت لبنان</option></datalist>
 <template id="working-period-template">
-    <div class="row g-2 align-items-end mb-2" data-period-row>
-        <div class="col-md-4"><label class="form-label">اليوم</label><select class="form-select" data-field="DayOfWeek"><option value="0">الأحد</option><option value="1">الاثنين</option><option value="2">الثلاثاء</option><option value="3">الأربعاء</option><option value="4">الخميس</option><option value="5">الجمعة</option><option value="6">السبت</option></select></div>
-        <div class="col-md-3"><label class="form-label">من</label><input class="form-control" data-field="StartLocal" type="time" step="60" value="09:00" required /></div>
-        <div class="col-md-3"><label class="form-label">إلى</label><input class="form-control" data-field="EndLocal" type="time" step="60" value="17:00" required /></div>
+    <div class="row g-2 align-items-end fp-working-period" data-period-row>
+        <div class="col-md-4"><label class="form-label">اليوم</label><select class="form-select" data-field="DayOfWeek" aria-label="يوم العمل"><option value="0">الأحد</option><option value="1">الاثنين</option><option value="2">الثلاثاء</option><option value="3">الأربعاء</option><option value="4">الخميس</option><option value="5">الجمعة</option><option value="6">السبت</option></select></div>
+        <div class="col-md-3"><label class="form-label">من</label><input class="form-control" data-field="StartLocal" aria-label="بداية فترة العمل" type="time" step="60" value="09:00" required /></div>
+        <div class="col-md-3"><label class="form-label">إلى</label><input class="form-control" data-field="EndLocal" aria-label="نهاية فترة العمل" type="time" step="60" value="17:00" required /></div>
         <div class="col-md-2"><button class="btn btn-outline-danger" type="button" data-remove-period>إزالة</button></div>
     </div>
 </template>

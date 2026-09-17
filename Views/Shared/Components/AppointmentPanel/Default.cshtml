@@ -1,38 +1,21 @@
 @model FixPal.Services.AppointmentPanelReadModel
 @using FixPal.Models.Enums
+@using FixPal.Models.ViewModels
 @functions {
-    private static DateTimeOffset ToDisplayTime(DateTimeOffset value, string timeZoneId)
-    {
-        try
-        {
-            return TimeZoneInfo.ConvertTime(value, TimeZoneInfo.FindSystemTimeZoneById(timeZoneId));
-        }
-        catch (TimeZoneNotFoundException)
-        {
-            return value.ToUniversalTime();
-        }
-        catch (InvalidTimeZoneException)
-        {
-            return value.ToUniversalTime();
-        }
-        catch (ArgumentException)
-        {
-            return value.ToUniversalTime();
-        }
-    }
-
     private static string StatusLabel(AppointmentStatus status) => status switch
     {
-        AppointmentStatus.Scheduled => "موعد مؤكد",
+        AppointmentStatus.Confirmed => "موعد مؤكد",
         AppointmentStatus.InProgress => "العمل قيد التنفيذ",
         AppointmentStatus.Completed => "مكتمل",
         AppointmentStatus.Cancelled => "ملغي",
         AppointmentStatus.Superseded => "تم استبداله",
+        AppointmentStatus.Proposed => "بانتظار التأكيد",
+        AppointmentStatus.Rejected => "مرفوض",
         _ => status.ToString()
     };
 }
 
-<section class="fp-detail-panel mt-4" dir="rtl" aria-labelledby="appointment-heading">
+<section class="fp-appointment-panel" dir="rtl" aria-labelledby="appointment-heading">
     <div class="fp-section-heading">
         <div>
             <span class="fp-eyebrow">الجدولة</span>
@@ -44,96 +27,155 @@
     {
         <p class="fp-notice">المواعيد متاحة لطلبات الصيانة الخاصة فقط.</p>
     }
-    else if (Model.ActiveAppointment is { } active)
+    else if (Model.RequestStatus != MaintenanceRequestStatus.Accepted || !Model.HasAcceptedAgreement)
     {
-        var start = ToDisplayTime(active.StartUtc, active.TimeZoneId);
-        var end = ToDisplayTime(active.EndUtc, active.TimeZoneId);
-        <div class="fp-notice">
-            <strong>@StatusLabel(active.Status)</strong>
-            <div><time datetime="@active.StartUtc.ToString("O")">@start.ToString("yyyy/MM/dd HH:mm")</time> – <time datetime="@active.EndUtc.ToString("O")">@end.ToString("yyyy/MM/dd HH:mm")</time></div>
-            <div>المنطقة الزمنية: <bdi>@active.TimeZoneId</bdi></div>
-        </div>
-
-        @if (active.Status == AppointmentStatus.Scheduled && Model.RequestStatus == MaintenanceRequestStatus.Accepted)
-        {
-            <div class="fp-commerce-grid mt-3">
-                <form asp-area="" asp-controller="Appointments" asp-action="Reschedule" method="post" class="fp-detail-panel">
-                    <h3>تغيير الموعد</h3>
-                    <input type="hidden" name="MaintenanceRequestId" value="@Model.MaintenanceRequestId" />
-                    <input type="hidden" name="AppointmentId" value="@active.Id" />
-                    <input type="hidden" name="ExpectedAppointmentRowVersion" value="@active.RowVersion" />
-                    <label class="form-label" for="appointment-reschedule-start">البداية الجديدة</label>
-                    <input class="form-control" id="appointment-reschedule-start" name="StartLocal" type="datetime-local" step="60" required />
-                    <label class="form-label mt-2" for="appointment-reschedule-end">النهاية الجديدة</label>
-                    <input class="form-control" id="appointment-reschedule-end" name="EndLocal" type="datetime-local" step="60" required />
-                    <p class="fp-field-hint mt-2">تُفسّر الأوقات وفق منطقة تقويم المزود: <bdi>@active.TimeZoneId</bdi>.</p>
-                    <button class="btn fp-btn-gold" type="submit">حفظ الموعد الجديد</button>
-                </form>
-                <form asp-area="" asp-controller="Appointments" asp-action="Cancel" method="post" class="fp-detail-panel">
-                    <h3>إلغاء الموعد</h3>
-                    <input type="hidden" name="MaintenanceRequestId" value="@Model.MaintenanceRequestId" />
-                    <input type="hidden" name="AppointmentId" value="@active.Id" />
-                    <input type="hidden" name="ExpectedAppointmentRowVersion" value="@active.RowVersion" />
-                    <p>يلغي هذا الإجراء الموعد فقط مع الاحتفاظ بسجله، ولا يلغي طلب الصيانة.</p>
-                    <button class="btn btn-outline-danger" type="submit">إلغاء الموعد</button>
-                </form>
-            </div>
-        }
-        else if (active.Status == AppointmentStatus.InProgress)
-        {
-            <p class="fp-field-hint">بدأ تنفيذ العمل، لذلك لم يعد الموعد قابلاً للتغيير أو الإلغاء.</p>
-        }
-    }
-    else if (Model.RequestStatus != MaintenanceRequestStatus.Accepted)
-    {
-        <p class="fp-notice">تصبح الجدولة متاحة بعد قبول الطلب واستكمال الاتفاق المطلوب.</p>
-    }
-    else if (!Model.HasAcceptedAgreement)
-    {
-        <p class="fp-notice">لا يوجد اتفاق مقبول بعد. يجب قبول عرض محدد قبل حجز موعد.</p>
-    }
-    else if (Model.CalendarTimeZoneId == null)
-    {
-        <p class="fp-notice">لم يُعِدّ مزود الخدمة تقويم العمل بعد.</p>
-    }
-    else if (Model.CalendarEnabled != true)
-    {
-        <p class="fp-notice">أوقف مزود الخدمة استقبال مواعيد جديدة حاليًا.</p>
+        <p class="fp-notice">تصبح الجدولة متاحة بعد قبول الاتفاق.</p>
     }
     else
     {
-        <form asp-area="" asp-controller="Appointments" asp-action="Schedule" method="post">
-            <input type="hidden" name="MaintenanceRequestId" value="@Model.MaintenanceRequestId" />
-            <div class="row g-3">
-                <div class="col-md-6">
-                    <label class="form-label" for="appointment-start">بداية الموعد</label>
-                    <input class="form-control" id="appointment-start" name="StartLocal" type="datetime-local" step="60" required />
-                </div>
-                <div class="col-md-6">
-                    <label class="form-label" for="appointment-end">نهاية الموعد</label>
-                    <input class="form-control" id="appointment-end" name="EndLocal" type="datetime-local" step="60" required />
-                </div>
+        @if (Model.ConfirmedAppointment is { } confirmed)
+        {
+            <div class="fp-appointment-current">
+                <span class="fp-status @confirmed.Status.ToString().ToLowerInvariant()">@StatusLabel(confirmed.Status)</span>
+                <dl class="fp-appointment-times">
+                    <div><dt>بداية الزيارة</dt><dd><time dir="ltr" datetime="@confirmed.StartUtc.ToString("O")">@SchedulingDisplay.Format(confirmed.StartUtc, confirmed.TimeZoneId)</time></dd></div>
+                    <div><dt>نهاية الموعد المخططة</dt><dd><time dir="ltr" datetime="@confirmed.EndUtc.ToString("O")">@SchedulingDisplay.Format(confirmed.EndUtc, confirmed.TimeZoneId)</time></dd></div>
+                </dl>
+                <p class="fp-field-hint">الأوقات حسب <bdi>@SchedulingDisplay.ZoneLabel(confirmed.TimeZoneId)</bdi>.</p>
             </div>
-            <p class="fp-field-hint mt-2">تُفسّر الأوقات وفق منطقة تقويم المزود: <bdi>@Model.CalendarTimeZoneId</bdi>.</p>
-            <button class="btn fp-btn-gold" type="submit">حجز الموعد</button>
-        </form>
+
+            @if (confirmed.Status == AppointmentStatus.Confirmed)
+            {
+                var hasReplacementProposal = Model.PendingProposals.Any(p => p.ReplacesAppointmentId == confirmed.Id);
+                <details class="fp-appointment-actions">
+                    <summary>تغيير الموعد أو إلغاؤه</summary>
+                    <div class="fp-commerce-grid">
+                        @if (!hasReplacementProposal)
+                        {
+                            <form asp-area="" asp-controller="Appointments" asp-action="Reschedule" method="post" class="fp-appointment-edit">
+                                <h3>اقتراح موعد بديل</h3>
+                                <input type="hidden" name="MaintenanceRequestId" value="@Model.MaintenanceRequestId" />
+                                <input type="hidden" name="AppointmentId" value="@confirmed.Id" />
+                                <input type="hidden" name="ExpectedAppointmentRowVersion" value="@confirmed.RowVersion" />
+                                <label class="form-label" for="appointment-reschedule-start">البداية الجديدة</label>
+                                <input class="form-control" id="appointment-reschedule-start" name="StartLocal" type="datetime-local" step="60" required />
+                                <label class="form-label mt-2" for="appointment-reschedule-end">النهاية الجديدة</label>
+                                <input class="form-control" id="appointment-reschedule-end" name="EndLocal" type="datetime-local" step="60" required />
+                                <p class="fp-field-hint mt-2">يبقى الموعد الحالي مؤكدًا حتى يقبل الطرف الآخر هذا الاقتراح. أدخل الوقت حسب <bdi>@SchedulingDisplay.ZoneLabel(Model.CalendarTimeZoneId)</bdi>.</p>
+                                <button class="btn fp-btn-gold" type="submit">إرسال الاقتراح</button>
+                            </form>
+                        }
+                        <form asp-area="" asp-controller="Appointments" asp-action="Cancel" method="post" class="fp-appointment-edit">
+                            <h3 class="text-danger">إلغاء الموعد المؤكد</h3>
+                            <input type="hidden" name="MaintenanceRequestId" value="@Model.MaintenanceRequestId" />
+                            <input type="hidden" name="AppointmentId" value="@confirmed.Id" />
+                            <input type="hidden" name="ExpectedAppointmentRowVersion" value="@confirmed.RowVersion" />
+                            <p>يلغي الموعد فقط مع الاحتفاظ بسجله، ولا يلغي طلب الصيانة.</p>
+                            <button class="btn btn-outline-danger" type="submit">إلغاء الموعد</button>
+                        </form>
+                    </div>
+                </details>
+            }
+            else
+            {
+                <p class="fp-field-hint">بدأ تنفيذ العمل، لذلك لم يعد الموعد قابلاً للتغيير أو الإلغاء.</p>
+            }
+        }
+
+        @if (Model.PendingProposals.Count > 0)
+        {
+            <div class="fp-appointment-proposals" aria-labelledby="appointment-proposals-heading">
+                <h3 id="appointment-proposals-heading">اقتراحات بانتظار القرار</h3>
+                @foreach (var proposal in Model.PendingProposals)
+                {
+                    <article class="fp-appointment-edit">
+                        <span class="fp-status proposed">@(proposal.ReplacesAppointmentId == null ? "اقتراح موعد" : "اقتراح موعد بديل")</span>
+                        <p class="mb-1"><strong><time dir="ltr" datetime="@proposal.StartUtc.ToString("O")">@SchedulingDisplay.Format(proposal.StartUtc, proposal.TimeZoneId)</time></strong></p>
+                        <p class="fp-field-hint">حتى <time dir="ltr" datetime="@proposal.EndUtc.ToString("O")">@SchedulingDisplay.Format(proposal.EndUtc, proposal.TimeZoneId)</time> حسب <bdi>@SchedulingDisplay.ZoneLabel(proposal.TimeZoneId)</bdi>.</p>
+                        @if (proposal.CreatedByCurrentUser)
+                        {
+                            <p>بانتظار تأكيد الطرف الآخر.</p>
+                            @if (proposal.CanWithdraw)
+                            {
+                                <form asp-area="" asp-controller="Appointments" asp-action="Cancel" method="post">
+                                    <input type="hidden" name="MaintenanceRequestId" value="@Model.MaintenanceRequestId" />
+                                    <input type="hidden" name="AppointmentId" value="@proposal.Id" />
+                                    <input type="hidden" name="ExpectedAppointmentRowVersion" value="@proposal.RowVersion" />
+                                    <button class="btn btn-outline-danger" type="submit">سحب الاقتراح</button>
+                                </form>
+                            }
+                        }
+                        else
+                        {
+                            <p>اقترح الطرف الآخر هذا الموعد. راجع الوقت ثم اختر قبول الاقتراح أو رفضه.</p>
+                            <div class="d-flex flex-wrap gap-2">
+                                @if (proposal.CanConfirm)
+                                {
+                                    <form asp-area="" asp-controller="Appointments" asp-action="Confirm" method="post">
+                                        <input type="hidden" name="MaintenanceRequestId" value="@Model.MaintenanceRequestId" />
+                                        <input type="hidden" name="AppointmentId" value="@proposal.Id" />
+                                        <input type="hidden" name="ExpectedAppointmentRowVersion" value="@proposal.RowVersion" />
+                                        <button class="btn fp-btn-gold" type="submit">تأكيد الموعد</button>
+                                    </form>
+                                }
+                                @if (proposal.CanReject)
+                                {
+                                    <form asp-area="" asp-controller="Appointments" asp-action="Reject" method="post">
+                                        <input type="hidden" name="MaintenanceRequestId" value="@Model.MaintenanceRequestId" />
+                                        <input type="hidden" name="AppointmentId" value="@proposal.Id" />
+                                        <input type="hidden" name="ExpectedAppointmentRowVersion" value="@proposal.RowVersion" />
+                                        <button class="btn btn-outline-danger" type="submit">رفض الاقتراح</button>
+                                    </form>
+                                }
+                            </div>
+                        }
+                    </article>
+                }
+            </div>
+        }
+
+        @if (Model.ConfirmedAppointment == null && Model.PendingProposals.Count == 0)
+        {
+            @if (Model.CalendarTimeZoneId == null)
+            {
+                <p class="fp-notice">لم يُعِدّ مزود الخدمة تقويم العمل بعد.</p>
+            }
+            else if (Model.CalendarEnabled != true)
+            {
+                <p class="fp-notice">أوقف مزود الخدمة استقبال اقتراحات مواعيد جديدة حاليًا.</p>
+            }
+            else
+            {
+                <form asp-area="" asp-controller="Appointments" asp-action="Schedule" method="post">
+                    <input type="hidden" name="MaintenanceRequestId" value="@Model.MaintenanceRequestId" />
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label" for="appointment-start">بداية الموعد المقترح</label>
+                            <input class="form-control" id="appointment-start" name="StartLocal" type="datetime-local" step="60" required />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="appointment-end">نهاية الموعد المقترح</label>
+                            <input class="form-control" id="appointment-end" name="EndLocal" type="datetime-local" step="60" required />
+                        </div>
+                    </div>
+                    <p class="fp-field-hint mt-2">لن يصبح الموعد مؤكدًا إلا بعد موافقة الطرف الآخر. أدخل الوقت حسب <bdi>@SchedulingDisplay.ZoneLabel(Model.CalendarTimeZoneId)</bdi>.</p>
+                    <button class="btn fp-btn-gold" type="submit">إرسال اقتراح الموعد</button>
+                </form>
+            }
+        }
     }
 
     @if (Model.History.Count > 0)
     {
         <details class="mt-3">
             <summary>سجل المواعيد السابقة</summary>
-            <ul class="mt-2">
+            <ul class="fp-appointment-history">
                 @foreach (var item in Model.History)
                 {
-                    var historicalStart = ToDisplayTime(item.StartUtc, item.TimeZoneId);
-                    var historicalEnd = ToDisplayTime(item.EndUtc, item.TimeZoneId);
                     <li>
-                        <strong>@StatusLabel(item.Status)</strong> —
-                        <time datetime="@item.StartUtc.ToString("O")">@historicalStart.ToString("yyyy/MM/dd HH:mm")</time>
-                        إلى
-                        <time datetime="@item.EndUtc.ToString("O")">@historicalEnd.ToString("yyyy/MM/dd HH:mm")</time>
-                        <span>(<bdi>@item.TimeZoneId</bdi>)</span>
+                        <span class="fp-status @item.Status.ToString().ToLowerInvariant()">@StatusLabel(item.Status)</span> —
+                        <time datetime="@item.StartUtc.ToString("O")">@SchedulingDisplay.Format(item.StartUtc, item.TimeZoneId)</time>
+                        إلى <time datetime="@item.EndUtc.ToString("O")">@SchedulingDisplay.Format(item.EndUtc, item.TimeZoneId)</time>
                     </li>
                 }
             </ul>

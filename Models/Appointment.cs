@@ -13,9 +13,11 @@ public class Appointment
     public DateTimeOffset StartUtc { get; set; }
     public DateTimeOffset EndUtc { get; set; }
     public string TimeZoneId { get; set; } = string.Empty;
-    public AppointmentStatus Status { get; set; } = AppointmentStatus.Scheduled;
+    public AppointmentStatus Status { get; set; } = AppointmentStatus.Proposed;
     public DateTimeOffset CreatedAtUtc { get; set; }
     public string CreatedByUserId { get; set; } = string.Empty;
+    public DateTimeOffset? DecisionAtUtc { get; set; }
+    public string? DecisionByUserId { get; set; }
     public DateTimeOffset? ClosedAtUtc { get; set; }
     public string? ClosedByUserId { get; set; }
     public int? ReplacesAppointmentId { get; set; }

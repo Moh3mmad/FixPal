@@ -14,7 +14,7 @@ public sealed class AppointmentsController(AppointmentService appointments) : Co
     {
         if (!ModelState.IsValid) return InvalidInput(command.MaintenanceRequestId);
         var result = await appointments.ScheduleAsync(User, command, ct);
-        return MapResult(result, command.MaintenanceRequestId, "تم حجز الموعد بنجاح.");
+        return MapResult(result, command.MaintenanceRequestId, "تم إرسال اقتراح الموعد للطرف الآخر.");
     }
 
     [HttpPost]
@@ -23,7 +23,25 @@ public sealed class AppointmentsController(AppointmentService appointments) : Co
     {
         if (!ModelState.IsValid) return InvalidInput(command.MaintenanceRequestId);
         var result = await appointments.RescheduleAsync(User, command, ct);
-        return MapResult(result, command.MaintenanceRequestId, "تم تغيير الموعد بنجاح.");
+        return MapResult(result, command.MaintenanceRequestId, "تم إرسال اقتراح الموعد البديل للطرف الآخر.");
+    }
+
+    [HttpPost]
+    [EnableRateLimiting("writes")]
+    public async Task<IActionResult> Confirm(AppointmentDecisionCommand command, CancellationToken ct)
+    {
+        if (!ModelState.IsValid) return InvalidInput(command.MaintenanceRequestId);
+        var result = await appointments.ConfirmAsync(User, command, ct);
+        return MapResult(result, command.MaintenanceRequestId, "تم تأكيد الموعد.");
+    }
+
+    [HttpPost]
+    [EnableRateLimiting("writes")]
+    public async Task<IActionResult> Reject(AppointmentDecisionCommand command, CancellationToken ct)
+    {
+        if (!ModelState.IsValid) return InvalidInput(command.MaintenanceRequestId);
+        var result = await appointments.RejectAsync(User, command, ct);
+        return MapResult(result, command.MaintenanceRequestId, "تم رفض اقتراح الموعد.");
     }
 
     [HttpPost]
@@ -32,7 +50,7 @@ public sealed class AppointmentsController(AppointmentService appointments) : Co
     {
         if (!ModelState.IsValid) return InvalidInput(command.MaintenanceRequestId);
         var result = await appointments.CancelAsync(User, command, ct);
-        return MapResult(result, command.MaintenanceRequestId, "تم إلغاء الموعد بنجاح.");
+        return MapResult(result, command.MaintenanceRequestId, "تم إلغاء الموعد أو سحب الاقتراح.");
     }
 
     private IActionResult MapResult(AppointmentResult result, int requestId, string successMessage)
