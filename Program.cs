@@ -7,6 +7,11 @@ using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
+builder.Services.AddScoped<FixPal.Services.SchedulingTimePolicy>();
+builder.Services.AddScoped<FixPal.Services.ProviderCalendarService>();
+builder.Services.AddScoped<FixPal.Services.ProviderBlackoutService>();
+builder.Services.AddScoped<FixPal.Services.AppointmentService>();
 builder.Services.AddScoped<FixPal.Services.AccountPhoneService>();
 builder.Services.AddScoped<FixPal.Services.RequestCommunicationPolicy>();
 builder.Services.AddScoped<FixPal.Services.RequestAccessService>();
