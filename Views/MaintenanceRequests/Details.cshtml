@@ -20,6 +20,7 @@
 
 
     @if (Model.Communication.IsPrivate) { <div class="fp-commerce-grid"><partial name="_CommunicationState" model="Model.Communication" /><partial name="_RequestContact" model="Model.Communication" /></div> }
+    @if (Model.RequestType == RequestType.PrivateService) { @await Component.InvokeAsync("AppointmentPanel", new { maintenanceRequestId = Model.Id }) }
     <section class="fp-tracking" aria-label="تتبع الطلب"><div class="fp-section-heading"><h2>من الطلب إلى الإنجاز</h2><span>آخر حالة مسجلة</span></div>
         <ol class="fp-timeline">@for (var i = 0; i < steps.Length; i++) { var done = Model.Status != MaintenanceRequestStatus.Cancelled && (int)Model.Status >= (int)steps[i]; <li class="@(done ? "reached" : "") @(Model.Status == steps[i] ? "current" : "")" aria-current="@(Model.Status == steps[i] ? "step" : null)"><span class="fp-timeline-dot">@(done ? "✓" : (i + 1).ToString())</span><strong>@RequestWorkflow.Label(steps[i])</strong>@if (dates[i].HasValue) { <time data-utc="@dates[i]!.Value.ToString("yyyy-MM-ddTHH:mm:ssZ")">@dates[i]!.Value.ToString("yyyy/MM/dd HH:mm") UTC</time> } else { <span class="fp-time-placeholder">لم تبدأ بعد</span> }</li> }</ol>
     </section>

@@ -14,6 +14,71 @@ public sealed class AppointmentService(
     SchedulingTimePolicy timePolicy,
     TimeProvider clock)
 {
+    public async Task<AppointmentPanelReadModel?> GetForRequestAsync(
+        ClaimsPrincipal user,
+        int maintenanceRequestId,
+        CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(user);
+
+        if (maintenanceRequestId <= 0)
+            return null;
+
+        var grant = await access.GetAsync(user, maintenanceRequestId, ct);
+        if (grant is not { CanParticipate: true })
+            return null;
+
+        var request = grant.Request;
+        var hasAgreement = await agreement.AgreedRequests.AsNoTracking()
+            .AnyAsync(r => r.Id == request.Id, ct);
+
+        string? calendarTimeZoneId = null;
+        bool? calendarEnabled = null;
+        var appointments = new List<Appointment>();
+
+        if (request.ProviderProfileId is int providerId)
+        {
+            var calendar = await db.ProviderCalendars.AsNoTracking()
+                .Where(c => c.ProviderProfileId == providerId)
+                .Select(c => new { c.TimeZoneId, c.IsEnabled })
+                .SingleOrDefaultAsync(ct);
+            calendarTimeZoneId = calendar?.TimeZoneId;
+            calendarEnabled = calendar?.IsEnabled;
+
+            appointments = await db.Appointments.AsNoTracking()
+                .Where(a => a.MaintenanceRequestId == request.Id && a.ProviderProfileId == providerId)
+                .OrderBy(a => a.CreatedAtUtc)
+                .ThenBy(a => a.Id)
+                .ToListAsync(ct);
+        }
+
+        var active = appointments
+            .Where(a => a.Status is AppointmentStatus.Scheduled or AppointmentStatus.InProgress)
+            .ToList();
+        if (active.Count > 1)
+            return null;
+
+        var history = appointments
+            .Where(a => a.Status is AppointmentStatus.Completed or AppointmentStatus.Cancelled or AppointmentStatus.Superseded)
+            .OrderByDescending(a => a.CreatedAtUtc)
+            .ThenByDescending(a => a.Id)
+            .Select(ToReadModel)
+            .ToList()
+            .AsReadOnly();
+
+        return new AppointmentPanelReadModel(
+            request.Id,
+            request.Status,
+            request.RequestType,
+            grant.IsOwner,
+            grant.IsProvider,
+            hasAgreement,
+            calendarTimeZoneId,
+            calendarEnabled,
+            active.Count == 1 ? ToReadModel(active[0]) : null,
+            history);
+    }
+
     public async Task<AppointmentResult> ScheduleAsync(
         ClaimsPrincipal user,
         ScheduleAppointmentCommand command,
@@ -452,6 +517,15 @@ public sealed class AppointmentService(
 
     private static AppointmentResult Success() =>
         new(AppointmentResultStatus.Success, Array.Empty<AppointmentError>());
+
+    private static AppointmentReadModel ToReadModel(Appointment appointment) => new(
+        appointment.Id,
+        appointment.StartUtc,
+        appointment.EndUtc,
+        appointment.TimeZoneId,
+        appointment.Status,
+        Convert.ToBase64String(appointment.RowVersion),
+        appointment.ReplacesAppointmentId);
 
     private static AppointmentResult TimeFailure(SchedulingTimeError error)
     {

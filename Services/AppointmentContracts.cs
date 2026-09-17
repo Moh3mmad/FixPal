@@ -1,3 +1,5 @@
+using FixPal.Models.Enums;
+
 namespace FixPal.Services;
 
 public sealed record ScheduleAppointmentCommand(
@@ -16,6 +18,27 @@ public sealed record CancelAppointmentCommand(
     int MaintenanceRequestId,
     int AppointmentId,
     string? ExpectedAppointmentRowVersion);
+
+public sealed record AppointmentReadModel(
+    int Id,
+    DateTimeOffset StartUtc,
+    DateTimeOffset EndUtc,
+    string TimeZoneId,
+    AppointmentStatus Status,
+    string RowVersion,
+    int? ReplacesAppointmentId);
+
+public sealed record AppointmentPanelReadModel(
+    int MaintenanceRequestId,
+    MaintenanceRequestStatus RequestStatus,
+    RequestType RequestType,
+    bool IsOwner,
+    bool IsAssignedProvider,
+    bool HasAcceptedAgreement,
+    string? CalendarTimeZoneId,
+    bool? CalendarEnabled,
+    AppointmentReadModel? ActiveAppointment,
+    IReadOnlyList<AppointmentReadModel> History);
 
 public enum AppointmentResultStatus
 {
