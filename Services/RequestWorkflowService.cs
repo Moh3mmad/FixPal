@@ -42,8 +42,52 @@ public class RequestWorkflowService(ApplicationDbContext db, RequestAccessServic
                 && !await agreement.AgreedRequests.AnyAsync(r => r.Id == id, ct)) return MutationResult.Conflict;
             if (to == MaintenanceRequestStatus.Completed && !await db.RequestQuotes.AnyAsync(q => q.MaintenanceRequestId == id
                 && q.FinalPrice != null && q.FinalPriceAcceptedAtUtc != null, ct)) return MutationResult.Conflict;
-            var query = db.MaintenanceRequests.Where(r => r.Id == id && r.Status == from && r.ProviderProfileId == grant.Request.ProviderProfileId);
             var now = DateTime.UtcNow;
+            if (to is MaintenanceRequestStatus.InProgress or MaintenanceRequestStatus.Completed)
+            {
+                var providerId = grant.Request.ProviderProfileId!.Value;
+                var calendar = await db.ProviderCalendars.FromSqlInterpolated(
+                    $"SELECT * FROM [ProviderCalendars] WITH (UPDLOCK, HOLDLOCK) WHERE [ProviderProfileId] = {providerId}")
+                    .AsNoTracking().SingleOrDefaultAsync(ct);
+                // A missing calendar preserves the pre-scheduling workflow for legacy requests.
+                if (calendar != null)
+                {
+                    var activeAppointments = await db.Appointments.AsNoTracking()
+                        .Where(a => a.MaintenanceRequestId == id && a.ProviderProfileId == providerId
+                            && (a.Status == AppointmentStatus.Scheduled || a.Status == AppointmentStatus.InProgress))
+                        .Take(2).ToListAsync(ct);
+                    if (activeAppointments.Count > 1) return MutationResult.Conflict;
+                    var appointment = activeAppointments.SingleOrDefault();
+                    if (appointment != null)
+                    {
+                        int appointmentChanged;
+                        if (to == MaintenanceRequestStatus.InProgress)
+                        {
+                            if (appointment.Status != AppointmentStatus.Scheduled) return MutationResult.Conflict;
+                            appointmentChanged = await db.Appointments.Where(a => a.Id == appointment.Id
+                                    && a.MaintenanceRequestId == id && a.ProviderProfileId == providerId
+                                    && a.Status == AppointmentStatus.Scheduled && a.RowVersion == appointment.RowVersion)
+                                .ExecuteUpdateAsync(setters => setters
+                                    .SetProperty(a => a.Status, AppointmentStatus.InProgress), ct);
+                        }
+                        else
+                        {
+                            if (appointment.Status != AppointmentStatus.InProgress) return MutationResult.Conflict;
+                            var closedAtUtc = new DateTimeOffset(now);
+                            var actorId = user.FindFirstValue(ClaimTypes.NameIdentifier)!;
+                            appointmentChanged = await db.Appointments.Where(a => a.Id == appointment.Id
+                                    && a.MaintenanceRequestId == id && a.ProviderProfileId == providerId
+                                    && a.Status == AppointmentStatus.InProgress && a.RowVersion == appointment.RowVersion)
+                                .ExecuteUpdateAsync(setters => setters
+                                    .SetProperty(a => a.Status, AppointmentStatus.Completed)
+                                    .SetProperty(a => a.ClosedAtUtc, closedAtUtc)
+                                    .SetProperty(a => a.ClosedByUserId, actorId), ct);
+                        }
+                        if (appointmentChanged != 1) return MutationResult.Conflict;
+                    }
+                }
+            }
+            var query = db.MaintenanceRequests.Where(r => r.Id == id && r.Status == from && r.ProviderProfileId == grant.Request.ProviderProfileId);
             var changed = to switch
             {
                 MaintenanceRequestStatus.Accepted => await query.ExecuteUpdateAsync(s => s.SetProperty(r => r.Status, to).SetProperty(r => r.AcceptedAtUtc, now), ct),
