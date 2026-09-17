@@ -112,12 +112,15 @@ namespace FixPal.Data
             appointment.HasOne<ApplicationUser>().WithMany()
                 .HasForeignKey(a => a.CreatedByUserId).IsRequired().OnDelete(DeleteBehavior.Restrict);
             appointment.HasOne<ApplicationUser>().WithMany()
+                .HasForeignKey(a => a.DecisionByUserId).IsRequired(false).OnDelete(DeleteBehavior.Restrict);
+            appointment.HasOne<ApplicationUser>().WithMany()
                 .HasForeignKey(a => a.ClosedByUserId).IsRequired(false).OnDelete(DeleteBehavior.Restrict);
             appointment.HasOne(a => a.ReplacesAppointment).WithMany()
                 .HasForeignKey(a => a.ReplacesAppointmentId).IsRequired(false).OnDelete(DeleteBehavior.Restrict);
             appointment.Property(a => a.StartUtc).HasColumnType("datetimeoffset(7)");
             appointment.Property(a => a.EndUtc).HasColumnType("datetimeoffset(7)");
             appointment.Property(a => a.CreatedAtUtc).HasColumnType("datetimeoffset(7)");
+            appointment.Property(a => a.DecisionAtUtc).HasColumnType("datetimeoffset(7)").IsRequired(false);
             appointment.Property(a => a.ClosedAtUtc).HasColumnType("datetimeoffset(7)").IsRequired(false);
             appointment.Property(a => a.TimeZoneId).IsRequired().HasMaxLength(100);
             appointment.Property(a => a.Status).HasConversion<int>();
@@ -125,7 +128,8 @@ namespace FixPal.Data
             appointment.HasIndex(a => a.MaintenanceRequestId).IsUnique()
                 .HasDatabaseName("UX_Appointments_ActiveRequest").HasFilter("[Status] IN (1, 2)");
             appointment.HasIndex(a => a.ReplacesAppointmentId).IsUnique()
-                .HasDatabaseName("UX_Appointments_Replacement").HasFilter("[ReplacesAppointmentId] IS NOT NULL");
+                .HasDatabaseName("UX_Appointments_Replacement")
+                .HasFilter("[ReplacesAppointmentId] IS NOT NULL AND [Status] IN (1, 2, 6)");
             appointment.HasIndex(a => new { a.ProviderProfileId, a.StartUtc })
                 .HasDatabaseName("IX_Appointments_ProviderInterval")
                 .IncludeProperties(a => new { a.EndUtc, a.Status, a.MaintenanceRequestId });
@@ -134,9 +138,10 @@ namespace FixPal.Data
             appointment.ToTable("Appointments", t =>
             {
                 t.HasCheckConstraint("CK_Appointments_Interval", "[StartUtc] < [EndUtc]");
-                t.HasCheckConstraint("CK_Appointments_Status", "[Status] IN (1, 2, 3, 4, 5)");
-                t.HasCheckConstraint("CK_Appointments_Closure", "([Status] IN (1, 2) AND [ClosedAtUtc] IS NULL AND [ClosedByUserId] IS NULL) OR ([Status] IN (3, 4, 5) AND [ClosedAtUtc] IS NOT NULL AND [ClosedByUserId] IS NOT NULL)");
-                t.HasCheckConstraint("CK_Appointments_Utc", "DATEPART(TZOFFSET, [StartUtc]) = 0 AND DATEPART(TZOFFSET, [EndUtc]) = 0 AND DATEPART(TZOFFSET, [CreatedAtUtc]) = 0 AND ([ClosedAtUtc] IS NULL OR DATEPART(TZOFFSET, [ClosedAtUtc]) = 0)");
+                t.HasCheckConstraint("CK_Appointments_Status", "[Status] IN (1, 2, 3, 4, 5, 6, 7)");
+                t.HasCheckConstraint("CK_Appointments_Closure", "([Status] IN (1, 2, 6) AND [ClosedAtUtc] IS NULL AND [ClosedByUserId] IS NULL) OR ([Status] IN (3, 4, 5, 7) AND [ClosedAtUtc] IS NOT NULL AND [ClosedByUserId] IS NOT NULL)");
+                t.HasCheckConstraint("CK_Appointments_Decision", "([DecisionAtUtc] IS NULL AND [DecisionByUserId] IS NULL AND [Status] <> 1 AND [Status] <> 7) OR ([DecisionAtUtc] IS NOT NULL AND [DecisionByUserId] IS NOT NULL AND [Status] <> 6)");
+                t.HasCheckConstraint("CK_Appointments_Utc", "DATEPART(TZOFFSET, [StartUtc]) = 0 AND DATEPART(TZOFFSET, [EndUtc]) = 0 AND DATEPART(TZOFFSET, [CreatedAtUtc]) = 0 AND ([DecisionAtUtc] IS NULL OR DATEPART(TZOFFSET, [DecisionAtUtc]) = 0) AND ([ClosedAtUtc] IS NULL OR DATEPART(TZOFFSET, [ClosedAtUtc]) = 0)");
                 t.HasCheckConstraint("CK_Appointments_TimeZone", "LEN(LTRIM(RTRIM([TimeZoneId]))) > 0");
                 t.HasCheckConstraint("CK_Appointments_Replacement", "[ReplacesAppointmentId] IS NULL OR [ReplacesAppointmentId] <> [Id]");
             });

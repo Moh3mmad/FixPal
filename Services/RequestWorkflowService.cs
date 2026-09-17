@@ -54,19 +54,22 @@ public class RequestWorkflowService(ApplicationDbContext db, RequestAccessServic
                 {
                     var activeAppointments = await db.Appointments.AsNoTracking()
                         .Where(a => a.MaintenanceRequestId == id && a.ProviderProfileId == providerId
-                            && (a.Status == AppointmentStatus.Scheduled || a.Status == AppointmentStatus.InProgress))
+                            && (a.Status == AppointmentStatus.Confirmed || a.Status == AppointmentStatus.InProgress
+                                || a.Status == AppointmentStatus.Proposed))
                         .Take(2).ToListAsync(ct);
                     if (activeAppointments.Count > 1) return MutationResult.Conflict;
                     var appointment = activeAppointments.SingleOrDefault();
                     if (appointment != null)
                     {
+                        // A pending proposal is not permission to treat a visit as confirmed.
+                        if (appointment.Status == AppointmentStatus.Proposed) return MutationResult.Conflict;
                         int appointmentChanged;
                         if (to == MaintenanceRequestStatus.InProgress)
                         {
-                            if (appointment.Status != AppointmentStatus.Scheduled) return MutationResult.Conflict;
+                            if (appointment.Status != AppointmentStatus.Confirmed) return MutationResult.Conflict;
                             appointmentChanged = await db.Appointments.Where(a => a.Id == appointment.Id
                                     && a.MaintenanceRequestId == id && a.ProviderProfileId == providerId
-                                    && a.Status == AppointmentStatus.Scheduled && a.RowVersion == appointment.RowVersion)
+                                    && a.Status == AppointmentStatus.Confirmed && a.RowVersion == appointment.RowVersion)
                                 .ExecuteUpdateAsync(setters => setters
                                     .SetProperty(a => a.Status, AppointmentStatus.InProgress), ct);
                         }

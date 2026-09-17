@@ -24,6 +24,8 @@ Services use `ApplicationDbContext` directly. MVC controllers only bind input, c
 
 Migration `20260917150633_AddPhase3Scheduling` creates `ProviderCalendars`, `ProviderWorkingPeriods`, `ProviderBlackouts`, and `Appointments`. It includes restrictive foreign keys, UTC and lifecycle check constraints, rowversion columns for calendars and appointments, the filtered unique active-request index, the replacement-history index, and provider interval indexes.
 
+Follow-up migration `20260917193231_AddAppointmentConfirmationLifecycle` adds explicit decision audit fields and proposal/rejection states. It converts legacy status-1 rows to proposals so an earlier unilateral booking is never represented as mutually confirmed.
+
 The model snapshot is a shared integration surface. Reconcile it by regenerating or carefully merging from the final combined model after Phase 2 and Phase 3 migrations are both present; do not choose one branch's snapshot wholesale.
 
 ## MVC routes and UI
@@ -35,6 +37,8 @@ The model snapshot is a shared integration surface. Reconcile it by regenerating
 - `POST /ProviderCalendar/RemoveBlackout`
 - `POST /Appointments/Schedule`
 - `POST /Appointments/Reschedule`
+- `POST /Appointments/Confirm`
+- `POST /Appointments/Reject`
 - `POST /Appointments/Cancel`
 
 The Arabic RTL provider page manages timezone, enabled state, weekly periods, blackouts, and blackout history. Private request details render an appointment component that shows agreement readiness, calendar readiness, active appointment actions, and terminal history. Unsafe actions retain global antiforgery validation and the existing `writes` rate-limit policy.
@@ -49,9 +53,11 @@ Scheduling and rescheduling use this order:
 4. Working-period, blackout, request appointment, and provider occupancy reads.
 5. Appointment write and transaction commit.
 
-Cancellation keeps the request lock and calendar lock but intentionally does not require current provider eligibility, agreement revalidation, or an enabled calendar. Calendar-only mutations lock `ProviderCalendar` and never acquire request locks. Half-open intervals `[start, end)` allow adjacent bookings. Scheduled appointments occupy their interval; in-progress appointments occupy from their start without a known end. Rescheduling supersedes the old row and inserts a replacement, preserving history. Cancellation closes the appointment without cancelling the request.
+Cancellation keeps the request lock and calendar lock but intentionally does not require current provider eligibility, agreement revalidation, or an enabled calendar. Calendar-only mutations lock `ProviderCalendar` and never acquire request locks. Half-open intervals `[start, end)` allow adjacent bookings. Only confirmed and in-progress appointments occupy provider time. A proposal does not reserve time; confirmation repeats calendar and conflict validation while holding the provider calendar lock.
 
-Request start and completion retain all existing workflow checks. When a calendar and active appointment exist, start changes `Scheduled` to `InProgress`, and completion changes `InProgress` to `Completed`, in the same request transaction. Missing calendars or appointments preserve legacy workflow behavior.
+Rescheduling creates a proposed replacement while the existing confirmed appointment remains active. Acceptance confirms the replacement and supersedes the old appointment atomically. Rejection or withdrawal preserves the original confirmation and all historical rows.
+
+Request start and completion retain all existing workflow checks. When a calendar and active appointment exist, start changes `Confirmed` to `InProgress`, and completion changes `InProgress` to `Completed`, in the same request transaction. A proposed appointment cannot be used as a confirmed visit. Missing calendars or appointments preserve legacy workflow behavior.
 
 ## Timezone policy
 
@@ -59,7 +65,7 @@ Appointment and blackout instants are stored as zero-offset `DateTimeOffset` val
 
 ## Verification
 
-`tests/FixPal.Scheduling.Tests` contains 16 deterministic xUnit cases for interval conversion, input kinds and precision, invalid intervals, custom-zone DST gaps and folds, working-period fit, local-date boundaries, half-open overlap, and `TimeProvider`-based future checks. Final result: 16 passed, 0 failed, 0 skipped.
+`tests/FixPal.Scheduling.Tests` contains deterministic time-policy and EF model-contract tests plus isolated SQL Server lifecycle scenarios for authorization, agreement gating, proposal decisions, rescheduling, blackout/working-hour revalidation, overlap, and concurrent confirmation. SQL scenarios require `FIXPAL_RUN_SQL_TESTS=1` and always use a unique `FixPal_Phase3_Tests_*` database.
 
 The full application build succeeded. Migrations were applied only to isolated database `FixPal_Phase3_Final_20260917_181058`. The application started against that same isolated database, completed its permitted seed startup, and returned HTTP 200 for `/`. The normal/shared database was not used.
 
@@ -91,5 +97,4 @@ Phone normalization, account contact handling, contact visibility, request messa
 - Browser-level visual and interaction verification for authenticated customer and provider accounts.
 - Field-specific localized validation messages; CP9 intentionally uses generic user-facing errors.
 - Broader transactional integration tests for concurrent SQL Server booking attempts.
-- A proposal/confirmation appointment workflow; the implemented lifecycle intentionally uses direct scheduling and has no `Proposed` or `Rejected` appointment states.
 - Rich calendar visualization, reminders, recurring exceptions, and external calendar integration.

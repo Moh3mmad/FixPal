@@ -4,6 +4,7 @@
 @{
     ViewData["Title"] = "طلب #" + Model.Id;
     var next = RequestWorkflow.Next(Model.Status);
+    var guidance = FixPal.Models.ViewModels.RequestNextStepViewModel.From(Model);
     var waitingForFinalPrice = next == MaintenanceRequestStatus.Completed && (!Model.HasAgreement || Model.Quote?.FinalPriceAcceptedAtUtc == null);
     var action = next switch { MaintenanceRequestStatus.Accepted => "Accept", MaintenanceRequestStatus.InProgress => "Start", MaintenanceRequestStatus.Completed => "Complete", _ => "" };
     var actionText = next switch { MaintenanceRequestStatus.Accepted => "قبول الطلب", MaintenanceRequestStatus.InProgress => "بدء التنفيذ", MaintenanceRequestStatus.Completed => "تأكيد اكتمال العمل", _ => "" };
@@ -14,6 +15,10 @@
     <a class="fp-text-link" asp-area="" asp-controller="@(Model.CanManage && !Model.IsOwner ? "ProviderRequests" : "MaintenanceRequests")" asp-action="Index">العودة إلى الطلبات</a>
     <div class="fp-page-heading mt-4"><div><span class="fp-eyebrow">طلب <bdi>#@Model.Id</bdi> · @(Model.RequestType == RequestType.PublicReport ? "بلاغ عن مكان عام" : "صيانة خاصة")</span><h1 class="fp-request-title">@Model.Title</h1><p>@Model.Category <span class="fp-separator">/</span> @Model.Location</p></div><span class="fp-status @Model.Status.ToString().ToLowerInvariant()">@RequestWorkflow.Label(Model.Status)</span></div>
     <partial name="_Flash" />
+    <section class="fp-next-action" aria-labelledby="next-step-title">
+        <div><span class="fp-eyebrow">الخطوة التالية</span><h2 id="next-step-title">@guidance.Title</h2><p>@guidance.Description</p></div>
+        <a class="btn fp-btn-gold" href="@guidance.Target">@guidance.LinkText</a>
+    </section>
     @if (Model.Status == MaintenanceRequestStatus.Accepted) { <p class="fp-notice">@(Model.HasAgreement ? "الاتفاق مؤكد. يمكن للمزود بدء التنفيذ." : "المزود مستعد للعمل. يلزم قبول عرض محدد قبل بدء التنفيذ.")</p> }
     <div class="fp-filter-tabs">@if (Model.Communication.IsPrivate) { <a asp-area="" asp-controller="RequestMessages" asp-action="Index" asp-route-id="@Model.Id">محادثة الطلب</a> }<a asp-area="" asp-controller="RequestEvidence" asp-action="Index" asp-route-id="@Model.Id">صور قبل وبعد</a></div>
 
@@ -21,21 +26,22 @@
 
     @if (Model.Communication.IsPrivate) { <div class="fp-commerce-grid"><partial name="_CommunicationState" model="Model.Communication" /><partial name="_RequestContact" model="Model.Communication" /></div> }
     @if (Model.RequestType == RequestType.PrivateService) { @await Component.InvokeAsync("AppointmentPanel", new { maintenanceRequestId = Model.Id }) }
-    <section class="fp-tracking" aria-label="تتبع الطلب"><div class="fp-section-heading"><h2>من الطلب إلى الإنجاز</h2><span>آخر حالة مسجلة</span></div>
+    <section id="request-tracking" class="fp-tracking" aria-label="تتبع الطلب"><div class="fp-section-heading"><h2>من الطلب إلى الإنجاز</h2><span>آخر حالة مسجلة</span></div>
         <ol class="fp-timeline">@for (var i = 0; i < steps.Length; i++) { var done = Model.Status != MaintenanceRequestStatus.Cancelled && (int)Model.Status >= (int)steps[i]; <li class="@(done ? "reached" : "") @(Model.Status == steps[i] ? "current" : "")" aria-current="@(Model.Status == steps[i] ? "step" : null)"><span class="fp-timeline-dot">@(done ? "✓" : (i + 1).ToString())</span><strong>@RequestWorkflow.Label(steps[i])</strong>@if (dates[i].HasValue) { <time data-utc="@dates[i]!.Value.ToString("yyyy-MM-ddTHH:mm:ssZ")">@dates[i]!.Value.ToString("yyyy/MM/dd HH:mm") UTC</time> } else { <span class="fp-time-placeholder">لم تبدأ بعد</span> }</li> }</ol>
     </section>
-    <div class="fp-details-grid"><section class="fp-detail-panel"><span class="fp-eyebrow">تفاصيل المشكلة</span><h2>الوصف</h2><p class="fp-description">@Model.Description</p><div class="fp-privacy-note"><i class="bi bi-lock" aria-hidden="true"></i> هذا الطلب خاص بصاحبه والمزود المعيّن والإدارة.</div></section>
+    <div class="fp-details-grid"><section id="request-description" class="fp-detail-panel"><span class="fp-eyebrow">تفاصيل المشكلة</span><h2>الوصف</h2><p class="fp-description">@Model.Description</p><div class="fp-privacy-note"><i class="bi bi-lock" aria-hidden="true"></i> هذا الطلب خاص بصاحبه والمزود المعيّن والإدارة.</div></section>
     <aside class="fp-detail-panel"><span class="fp-eyebrow">ملخص الطلب</span><dl class="fp-facts"><dt>مزود الخدمة</dt><dd>@(Model.ProviderName ?? "لم يتم تعيين مزود")</dd><dt>التخصص</dt><dd>@Model.Category</dd><dt>موقع الخدمة</dt><dd>@Model.Location</dd><dt>تاريخ التسجيل</dt><dd><time data-utc="@Model.CreatedAtUtc.ToString("yyyy-MM-ddTHH:mm:ssZ")">@Model.CreatedAtUtc.ToString("yyyy/MM/dd HH:mm") UTC</time></dd></dl></aside></div>
     @if (Model.Latitude.HasValue) { <p class="fp-notice mt-3">نقطة وصول خاصة بالطلب: <bdi>@Model.Latitude.Value.ToString("F5", System.Globalization.CultureInfo.InvariantCulture), @Model.Longitude!.Value.ToString("F5", System.Globalization.CultureInfo.InvariantCulture)</bdi></p> }
     @if (Model.RequestType == RequestType.PublicReport) { <partial name="_ReportSafety" /> }
-    @if (Model.CanManage && next.HasValue) { <section class="fp-next-action"><div><span class="fp-eyebrow">الخطوة التالية</span><h2>@actionText</h2><p>@(next == MaintenanceRequestStatus.Completed ? "أكد فقط عندما يكون العمل قد اكتمل فعليًا. سيظهر التحديث لصاحب الطلب." : "تحديث الحالة يساعد صاحب الطلب على متابعة التقدم.")</p></div><form asp-area="" asp-controller="ProviderRequests" asp-action="@action" method="post"><input type="hidden" name="id" value="@Model.Id" /><button class="btn fp-btn-gold" type="submit" disabled="@(waitingForFinalPrice || (next == MaintenanceRequestStatus.InProgress && !Model.HasAgreement))">@actionText</button>@if (waitingForFinalPrice) { <p class="fp-field-hint mt-2">بانتظار موافقة العميل على السعر النهائي في قسم المحاكاة أدناه.</p> }</form></section> }
+    <div id="request-workflow">
+    @if (Model.CanManage && next.HasValue) { <section class="fp-workflow-action"><div><span class="fp-eyebrow">تحديث التنفيذ</span><h2>@actionText</h2><p>@(next == MaintenanceRequestStatus.Completed ? "أكد فقط عندما يكون العمل قد اكتمل فعليًا. سيظهر التحديث لصاحب الطلب." : "تحديث الحالة يساعد صاحب الطلب على متابعة التقدم.")</p></div><form asp-area="" asp-controller="ProviderRequests" asp-action="@action" method="post"><input type="hidden" name="id" value="@Model.Id" /><button class="btn fp-btn-gold" type="submit" disabled="@(waitingForFinalPrice || (next == MaintenanceRequestStatus.InProgress && !Model.HasAgreement))">@actionText</button>@if (waitingForFinalPrice) { <p class="fp-field-hint mt-2">بانتظار موافقة العميل على السعر النهائي في قسم المحاكاة أدناه.</p> }</form></section> }
     else if (Model.Status == MaintenanceRequestStatus.Completed) { <section class="fp-completion"><i class="bi bi-check2-circle" aria-hidden="true"></i><div><h2>اكتمل العمل حسب تحديث المزود.</h2><p>سجل الخطوات والتوقيتات محفوظ هنا للرجوع إليه.</p></div></section> }
     else if (Model.ProviderName == null) { <p class="fp-notice mt-4">الطلب محفوظ بدون مزود معيّن. يمكن لمزود مؤهل في تخصصك ومنطقتك تولي الطلب وتقديم عرض.</p> }
     <div class="fp-commerce-grid">
         <partial name="_RequestQuote" model="Model" />
         <partial name="_DemoPayment" model="Model" />
     </div>
-    <partial name="_RequestReview" model="Model" />
+    <div id="request-review"><partial name="_RequestReview" model="Model" /></div>
 </div>
 
 

@@ -3,9 +3,9 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#081A3A" />
+    <meta name="theme-color" content="#082B4A" />
 
-    <title>@ViewData["Title"] - FixPal</title>
+    <title>@ViewData["Title"] — صلّحلي</title>
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -23,10 +23,10 @@
     @await RenderSectionAsync("Styles", required: false)
 </head>
 <body>
-    <a class="visually-hidden-focusable" href="#main-content">تجاوز إلى المحتوى</a>
+    <a class="fp-skip-link" href="#main-content">تجاوز إلى المحتوى</a>
     <partial name="_Navbar" />
 
-    <main id="main-content" class="fp-main" role="main">
+    <main id="main-content" class="fp-main" tabindex="-1">
         @RenderBody()
     </main>
 

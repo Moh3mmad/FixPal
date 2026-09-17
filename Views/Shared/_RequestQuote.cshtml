@@ -12,7 +12,7 @@
 }
 @if (Model.RequestType == RequestType.PrivateService)
 {
-    <section class="fp-detail-panel mt-4">
+    <section id="request-quote" class="fp-detail-panel mt-4">
         <span class="fp-eyebrow">اتفاق واضح بين الطرفين</span><h2>عرض السعر</h2>
         @if (Model.IsLegacy) { <p class="fp-field-hint">سجل سابق لتحديث الاتفاقات. لا نفترض موافقة غير مسجلة، ويبقى تاريخه محفوظًا.</p> }
         @if (current != null)

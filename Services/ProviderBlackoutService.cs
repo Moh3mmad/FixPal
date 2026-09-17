@@ -72,7 +72,7 @@ public sealed class ProviderBlackoutService(
 
             var appointmentConflict = await db.Appointments.AsNoTracking().AnyAsync(a =>
                 a.ProviderProfileId == provider.ProviderId
-                && ((a.Status == AppointmentStatus.Scheduled
+                && ((a.Status == AppointmentStatus.Confirmed
                         && a.StartUtc < interval.EndUtc && interval.StartUtc < a.EndUtc)
                     || (a.Status == AppointmentStatus.InProgress && a.StartUtc < interval.EndUtc)), ct);
             if (appointmentConflict)

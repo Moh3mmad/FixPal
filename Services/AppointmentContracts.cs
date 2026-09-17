@@ -2,16 +2,18 @@ using FixPal.Models.Enums;
 
 namespace FixPal.Services;
 
-public sealed record ScheduleAppointmentCommand(
-    int MaintenanceRequestId,
-    DateTime StartLocal,
-    DateTime EndLocal);
+public sealed record ScheduleAppointmentCommand(int MaintenanceRequestId, DateTime StartLocal, DateTime EndLocal);
 
 public sealed record RescheduleAppointmentCommand(
     int MaintenanceRequestId,
     int AppointmentId,
     DateTime StartLocal,
     DateTime EndLocal,
+    string? ExpectedAppointmentRowVersion);
+
+public sealed record AppointmentDecisionCommand(
+    int MaintenanceRequestId,
+    int AppointmentId,
     string? ExpectedAppointmentRowVersion);
 
 public sealed record CancelAppointmentCommand(
@@ -26,7 +28,14 @@ public sealed record AppointmentReadModel(
     string TimeZoneId,
     AppointmentStatus Status,
     string RowVersion,
-    int? ReplacesAppointmentId);
+    int? ReplacesAppointmentId,
+    bool CreatedByCurrentUser,
+    DateTimeOffset CreatedAtUtc,
+    DateTimeOffset? DecisionAtUtc,
+    bool CanConfirm,
+    bool CanReject,
+    bool CanWithdraw,
+    bool CanCancel);
 
 public sealed record AppointmentPanelReadModel(
     int MaintenanceRequestId,
@@ -37,7 +46,8 @@ public sealed record AppointmentPanelReadModel(
     bool HasAcceptedAgreement,
     string? CalendarTimeZoneId,
     bool? CalendarEnabled,
-    AppointmentReadModel? ActiveAppointment,
+    AppointmentReadModel? ConfirmedAppointment,
+    IReadOnlyList<AppointmentReadModel> PendingProposals,
     IReadOnlyList<AppointmentReadModel> History);
 
 public enum AppointmentResultStatus
@@ -51,6 +61,4 @@ public enum AppointmentResultStatus
 
 public sealed record AppointmentError(string Field, string Code);
 
-public sealed record AppointmentResult(
-    AppointmentResultStatus Status,
-    IReadOnlyList<AppointmentError> Errors);
+public sealed record AppointmentResult(AppointmentResultStatus Status, IReadOnlyList<AppointmentError> Errors);

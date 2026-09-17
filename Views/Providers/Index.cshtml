@@ -1,9 +1,40 @@
 @model FixPal.Models.ViewModels.ProviderDirectoryViewModel
 @{ ViewData["Title"] = "مزودو الخدمة"; }
-<div class="container fp-workspace"><div class="fp-page-heading"><div><span class="fp-eyebrow">خبرات قريبة من احتياجك</span><h1>ابحث عن مزود خدمتك.</h1><p>ملفات راجعتها إدارة FixPal. تصفّح بحرية، وسجّل الدخول عندما تكون جاهزًا للطلب.</p></div><a asp-area="" asp-controller="ProviderApplication" asp-action="Apply" class="fp-text-link">انضم كمزود خدمة</a></div>
-<form method="get" asp-area="" asp-action="Index" class="fp-directory-filter"><div><label asp-for="CategoryId" class="form-label">التخصص</label><select asp-for="CategoryId" asp-items="Model.Categories" class="form-select"><option value="">كل التخصصات</option></select></div><div><label asp-for="CityId" class="form-label">المدينة</label><select asp-for="CityId" asp-items="Model.Cities" class="form-select"><option value="">كل المدن</option></select></div><button type="submit" class="btn fp-btn-navy">عرض المزودين</button></form>
-<div class="fp-list-heading"><span>@Model.Results.TotalCount مزود ضمن النتائج</span><span>الترتيب حسب الاسم</span></div>
-@if (Model.Results.Items.Count == 0) { <section class="fp-empty"><h2>لا توجد ملفات متاحة بهذه الخيارات.</h2><p>جرّب تخصصًا أو مدينة أخرى، أو سجّل طلبك بدون تعيين مزود.</p><a asp-area="" asp-controller="MaintenanceRequests" asp-action="Create" class="btn fp-btn-navy">إنشاء طلب</a></section> }
-<div class="fp-provider-grid">@foreach (var provider in Model.Results.Items) { <article class="fp-provider-card"><span class="fp-provider-monogram" aria-hidden="true">@(string.IsNullOrWhiteSpace(provider.DisplayName) ? "ف" : provider.DisplayName.Trim()[..1])</span><span class="fp-approved">راجعته إدارة FixPal</span><h2><a asp-area="" asp-action="Details" asp-route-id="@provider.Id">@provider.DisplayName</a></h2><p class="fp-provider-category">@provider.Category</p><p>@provider.Location</p><partial name="_Availability" model="provider" /><a asp-area="" asp-action="Details" asp-route-id="@provider.Id" class="fp-text-link">عرض الملف <i class="bi bi-arrow-left" aria-hidden="true"></i></a></article> }</div>
-<nav class="fp-pagination" aria-label="صفحات المزودين">@if (Model.Results.Page > 1) { <a asp-area="" asp-action="Index" asp-route-page="@(Model.Results.Page - 1)" asp-route-categoryId="@Model.CategoryId" asp-route-cityId="@Model.CityId">السابق</a> }<span>صفحة @Model.Results.Page من @Model.Results.TotalPages</span>@if (Model.Results.Page < Model.Results.TotalPages) { <a asp-area="" asp-action="Index" asp-route-page="@(Model.Results.Page + 1)" asp-route-categoryId="@Model.CategoryId" asp-route-cityId="@Model.CityId">التالي</a> }</nav></div>
+<div class="container fp-workspace">
+    <div class="fp-page-heading">
+        <div><span class="fp-eyebrow">خبرات قريبة منك</span><h1>ابحث عن مزود خدمتك.</h1><p>اختر التخصص والمدينة، وقارن الملفات وتجارب أصحاب الطلبات.</p></div>
+        <a asp-controller="ProviderApplication" asp-action="Apply" class="fp-text-link">انضم كمزود خدمة</a>
+    </div>
+    <form method="get" asp-action="Index" class="fp-directory-filter" aria-label="تصفية المزودين">
+        <div><label asp-for="CategoryId" class="form-label">التخصص</label><select asp-for="CategoryId" asp-items="Model.Categories" class="form-select"><option value="">كل التخصصات</option></select></div>
+        <div><label asp-for="CityId" class="form-label">المدينة</label><select asp-for="CityId" asp-items="Model.Cities" class="form-select"><option value="">كل المدن</option></select></div>
+        <button type="submit" class="btn fp-btn-navy">عرض المزودين</button>
+        <a asp-action="Index" class="fp-text-link">مسح التصفية</a>
+    </form>
+    <div class="fp-list-heading"><span>@Model.Results.TotalCount مزود ضمن النتائج</span><span>الترتيب حسب الاسم</span></div>
+    @if (Model.Results.Items.Count == 0)
+    {
+        <section class="fp-empty"><h2>لم نجد مزودًا بهذه الخيارات.</h2><p>جرّب تخصصًا أو مدينة أخرى، أو سجّل طلبك بدون تعيين مزود.</p><a asp-controller="MaintenanceRequests" asp-action="Create" class="btn fp-btn-navy">إنشاء طلب</a></section>
+    }
+    <div class="fp-provider-results">
+        @foreach (var provider in Model.Results.Items)
+        {
+            <article class="fp-provider-result">
+                <span class="fp-provider-monogram" aria-hidden="true">@(string.IsNullOrWhiteSpace(provider.DisplayName) ? "ص" : provider.DisplayName.Trim()[..1])</span>
+                <div class="fp-provider-identity"><p class="fp-eyebrow">@provider.Category</p><h2><a asp-action="Details" asp-route-id="@provider.Id">@provider.DisplayName</a></h2><p>@provider.Location</p></div>
+                <div class="fp-provider-summary"><partial name="_Availability" model="provider" /></div>
+                <a asp-action="Details" asp-route-id="@provider.Id" class="btn fp-btn-ghost" aria-label="عرض ملف @provider.DisplayName">عرض الملف</a>
+            </article>
+        }
+    </div>
+    <p class="fp-field-hint mt-3">الملفات المعروضة راجعتها إدارة صلّحلي. راجع تفاصيل الخدمة واتفق مع المزود قبل التنفيذ.</p>
+    @if (Model.Results.TotalCount > 0)
+    {
+        <nav class="fp-pagination" aria-label="صفحات المزودين">
+            @if (Model.Results.Page > 1) { <a asp-action="Index" asp-route-page="@(Model.Results.Page - 1)" asp-route-categoryId="@Model.CategoryId" asp-route-cityId="@Model.CityId">السابق</a> }
+            <span>صفحة @Model.Results.Page من @Model.Results.TotalPages</span>
+            @if (Model.Results.Page < Model.Results.TotalPages) { <a asp-action="Index" asp-route-page="@(Model.Results.Page + 1)" asp-route-categoryId="@Model.CategoryId" asp-route-cityId="@Model.CityId">التالي</a> }
+        </nav>
+    }
+</div>
 

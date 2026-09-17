@@ -120,7 +120,7 @@ public sealed class ProviderCalendarService(
             if (errors.Count != 0) return new(ProviderCalendarStatus.ValidationFailed, errors.AsReadOnly());
 
             var active = db.Appointments.AsNoTracking().Where(a => a.ProviderProfileId == providerId
-                && (a.Status == AppointmentStatus.Scheduled || a.Status == AppointmentStatus.InProgress));
+                && (a.Status == AppointmentStatus.Confirmed || a.Status == AppointmentStatus.InProgress));
             if (!string.Equals(calendar.TimeZoneId, zone!.Id, StringComparison.Ordinal)
                 && await active.AnyAsync(ct))
                 return Error(ProviderCalendarStatus.Conflict, nameof(command.TimeZoneId), "ActiveAppointmentsPreventTimeZoneChange");
@@ -132,7 +132,7 @@ public sealed class ProviderCalendarService(
             if (!existingPeriods.SequenceEqual(periods))
             {
                 var now = timeProvider.GetUtcNow();
-                var futureAppointments = await active.Where(a => a.Status == AppointmentStatus.Scheduled && a.StartUtc > now)
+                var futureAppointments = await active.Where(a => a.Status == AppointmentStatus.Confirmed && a.StartUtc > now)
                     .Select(a => new { a.StartUtc, a.EndUtc }).ToListAsync(ct);
                 var definitions = periods.Select(p => new WorkingPeriodDefinition(p.DayOfWeek, p.StartLocal, p.EndLocal)).ToArray();
                 // Disabling booking is allowed, but it does not erase existing commitments.

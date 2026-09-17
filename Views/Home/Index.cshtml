@@ -1,13 +1,54 @@
-@{ ViewData["Title"] = "صيانة أوضح، خطوة بخطوة"; }
+@{ ViewData["Title"] = "الصيانة، بدون لف ودوران"; }
 @section Styles { <link rel="stylesheet" href="~/css/pages/home.css" asp-append-version="true" /> }
-<section class="fp-home-intro"><div class="container"><div class="fp-home-grid">
-<div class="fp-home-copy"><span class="fp-eyebrow">FIXPAL / صيانة بتنسيق أوضح</span><h1>للمشكلة حل.<br /><span>وللحل، طريق واضح.</span></h1><p>اعثر على مزود خدمة معتمد، اشرح ما تحتاجه، وتابع طلبك من القبول إلى اكتمال العمل. بدون أن تضيع التفاصيل بين الخطوات.</p><div class="fp-home-actions"><a class="btn fp-btn-gold" asp-area="" asp-controller="MaintenanceRequests" asp-action="Create">ابدأ طلب صيانة <i class="bi bi-arrow-left" aria-hidden="true"></i></a><a class="btn fp-btn-ghost" asp-area="" asp-controller="Providers" asp-action="Index">تصفّح مزودي الخدمة</a></div><small>التصفّح متاح للجميع. تحتاج حسابًا لإرسال الطلب ومتابعته.</small></div>
-<div class="fp-home-object" aria-label="مراحل رحلة الصيانة"><div class="fp-stone-stripe"></div><div class="fp-home-object-heading"><span class="fp-home-object-brand" dir="ltr">FixPal</span><span>كل خطوة في مكانها</span></div><ol><li><span>01</span><div><strong>المشكلة واضحة</strong><p>وصف، تخصص، ومنطقة الخدمة</p></div></li><li><span>02</span><div><strong>الطلب عند المزود</strong><p>يصل للمزود الذي اخترته ليقبله</p></div></li><li><span>03</span><div><strong>العمل قيد التنفيذ</strong><p>تتابع الحالة من حسابك</p></div></li><li><span>04</span><div><strong>تم الإنجاز</strong><p>خطوات محفوظة وتوقيت واضح</p></div></li></ol><div class="fp-home-object-footer">تنسيق الصيانة، من البداية للنهاية.</div></div>
-</div></div></section>
-<section class="fp-home-services"><div class="container"><div class="fp-home-section-heading"><div><span class="fp-eyebrow">الخدمة المناسبة</span><h2>ابدأ بما يحتاج إصلاحًا.</h2></div><a class="fp-text-link" asp-area="" asp-controller="Services" asp-action="Index">استكشف الخدمات <i class="bi bi-arrow-left" aria-hidden="true"></i></a></div>
-<div class="fp-home-paths"><article><span class="fp-home-path-number">01 / للأفراد</span><h3>صيانة خاصة</h3><p>اختر تخصصًا ومنطقة، ثم مزودًا معتمدًا متاحًا ضمنهما. أو سجّل طلبك بدون تعيين مزود الآن.</p><a asp-area="" asp-controller="Providers" asp-action="Index" class="fp-text-link">اعثر على مزود خدمة</a></article><article><span class="fp-home-path-number">02 / للمكان العام</span><h3>سجّل مشكلة في محيطك</h3><p>بلاغ مجتمعي محفوظ لصاحبه والإدارة داخل FixPal؛ لا يُنشر للعامة ولا يُرسل إلى الجهات الرسمية. في الطوارئ استخدم القناة الرسمية مباشرة.</p><a asp-area="" asp-controller="MaintenanceRequests" asp-action="Create" asp-route-requestType="PublicReport" class="fp-text-link">تسجيل بلاغ</a></article></div></div></section>
-<section id="how-it-works" class="fp-home-how"><div class="container"><div class="fp-home-section-heading"><div><span class="fp-eyebrow">كيف يعمل FixPal</span><h2>خطوات قليلة. صورة كاملة.</h2></div></div><div class="fp-home-steps"><article><b>01</b><h3>تصفّح واختر</h3><p>اطّلع على التخصصات وملفات المزودين قبل إنشاء حساب.</p></article><article><b>02</b><h3>اكتب طلبك</h3><p>سجّل الدخول وحدد المشكلة والتخصص والمنطقة.</p></article><article><b>03</b><h3>تابع التنفيذ</h3><p>المزود المعيّن يقبل الطلب ثم يحدّث حالته عند بدء العمل.</p></article><article><b>04</b><h3>اطّلع على الإنجاز</h3><p>شاهد اكتمال العمل، وراجع الصور ثم شارك تقييمك للخدمة.</p></article></div></div></section>
-<section class="fp-home-city"><div class="container"><span class="fp-eyebrow">نقطة البداية</span><h2>نبدأ من القدس،<br />ونبني تجربة قابلة للتوسع لكل مدينة.</h2><p>خدمات محلية، وتنظيم يحترم وقت الناس. المناطق والتخصصات تتوسع مع انضمام مزودي الخدمة.</p></div></section>
-<section class="container fp-home-join"><div><span class="fp-eyebrow">لأصحاب الخبرة</span><h2>عملك يستحق أن يصل للناس.</h2><p>قدّم ملفك المهني للمراجعة، وابدأ باستقبال الطلبات بعد الاعتماد.</p></div><a class="btn fp-btn-navy" asp-area="" asp-controller="ProviderApplication" asp-action="Apply">انضم كمزود خدمة</a></section>
+<section class="fp-home-intro">
+    <div class="container fp-home-grid">
+        <div class="fp-home-copy">
+            <span class="fp-eyebrow">صلّحلي · صيانة قريبة منك</span>
+            <h1>الصيانة،<br />بدون لف ودوران.</h1>
+            <p>اختار مزود، اتفق على التفاصيل، احجز موعدك، وتابع الشغل من مكان واحد.</p>
+            <div class="fp-home-actions">
+                <a class="btn fp-btn-gold" asp-controller="Providers" asp-action="Index">ابحث عن مزود خدمة <i class="bi bi-arrow-left" aria-hidden="true"></i></a>
+                <a class="fp-text-link" asp-controller="MaintenanceRequests" asp-action="Create">لديّ مشكلة، أريد إنشاء طلب</a>
+            </div>
+            <p class="fp-field-hint">تصفّح بدون حساب. سجّل الدخول عندما تكون جاهزًا للطلب.</p>
+        </div>
+        <aside class="fp-home-ledger" aria-labelledby="home-ledger-title">
+            <span class="fp-eyebrow">من أول وصف لآخر تفصيل</span>
+            <h2 id="home-ledger-title">طلبك له مكان.<br />وتفاصيله محفوظة.</h2>
+            <dl>
+                <div><dt>الاتفاق</dt><dd>عرض سعر واضح، وقبول مسجّل</dd></div>
+                <div><dt>الموعد</dt><dd>زيارة ضمن تقويم عمل المزود</dd></div>
+                <div><dt>المتابعة</dt><dd>محادثة خاصة، صور، وحالة التنفيذ</dd></div>
+            </dl>
+            <a class="fp-text-link" href="#how-it-works">تعرّف على رحلة الطلب</a>
+        </aside>
+    </div>
+</section>
+<section id="how-it-works" class="fp-home-how">
+    <div class="container fp-journey-layout">
+        <div class="fp-home-section-heading">
+            <span class="fp-eyebrow">كيف يعمل صلّحلي؟</span>
+            <h2>من «شو المشكلة؟»<br />إلى «يعطيك العافية».</h2>
+            <p>خطوات واضحة بينك وبين مزود الخدمة. ارجع للتفاصيل متى احتجتها.</p>
+        </div>
+        <ol class="fp-home-journey">
+            <li><span aria-hidden="true">01</span><div><h3>اختر مزود الخدمة</h3><p>تصفّح التخصص والمنطقة والتقييمات، أو ابدأ بطلب دون تعيين مزود.</p></div></li>
+            <li><span aria-hidden="true">02</span><div><h3>اشرح المشكلة</h3><p>اكتب التفاصيل وحدد المكان، واستعن باقتراح التخصص إذا احتجت.</p></div></li>
+            <li><span aria-hidden="true">03</span><div><h3>اتفق على السعر</h3><p>راجع عرض المزود. اقبله أو اطلب تعديله قبل بدء التنفيذ.</p></div></li>
+            <li><span aria-hidden="true">04</span><div><h3>احجز الموعد</h3><p>بعد الاتفاق، احجز ضمن ساعات عمل المزود عندما يكون تقويمه مفعّلًا.</p></div></li>
+            <li><span aria-hidden="true">05</span><div><h3>تابع التنفيذ</h3><p>تواصل في محادثة الطلب، وراجع الصور وتحديثات سير العمل.</p></div></li>
+            <li><span aria-hidden="true">06</span><div><h3>قيّم التجربة</h3><p>بعد اكتمال الخدمة، شارك تجربتك لتساعد الآخرين في الاختيار.</p></div></li>
+        </ol>
+    </div>
+</section>
+<section class="fp-home-services">
+    <div class="container fp-home-paths">
+        <article><span class="fp-eyebrow">للبيت ومكان العمل</span><h2>كل مشكلة تبدأ بوصف.</h2><p>ابحث عن التخصص المناسب لاحتياجك. الطلب يجمعك بالمزود المعيّن، وتبقى تفاصيله خاصة بينكما ومع الإدارة.</p><a class="fp-text-link" asp-controller="Services" asp-action="Index">استكشف الخدمات</a></article>
+        <article><span class="fp-eyebrow">للمكان العام</span><h2>لاحظت مشكلة في محيطك؟</h2><p>سجّل بلاغًا مجتمعيًا داخل صلّحلي. يراه صاحب البلاغ والإدارة، ولا يُرسل إلى الجهات الرسمية. في الطوارئ، تواصل مع القناة الرسمية مباشرة.</p><a class="fp-text-link" asp-controller="MaintenanceRequests" asp-action="Create" asp-route-requestType="PublicReport">تسجيل بلاغ</a></article>
+    </div>
+</section>
+<section class="fp-home-join">
+    <div class="container"><div><span class="fp-eyebrow">لأصحاب الخبرة</span><h2>شغلك بإيدك. وتنظيمه علينا.</h2><p>قدّم ملفك للمراجعة، ثم أدر طلبات العمل وتقويمك من مساحتك كمزود.</p></div><a class="btn fp-btn-gold" asp-controller="ProviderApplication" asp-action="Apply">انضم كمزود خدمة</a></div>
+</section>
 
 

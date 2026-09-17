@@ -27,7 +27,7 @@
                 <span class="d-block fw-bold text-dark text-truncate">
                     @User.Identity?.Name
                 </span>
-                <small class="text-muted">حساب FixPal</small>
+                <small class="text-muted">حساب صلّحلي</small>
             </li>
 
             @if (User.IsInRole(AppRoles.Admin))
@@ -43,6 +43,9 @@
             {
                 <li><a class="dropdown-item" asp-area="" asp-controller="ProviderRequests" asp-action="Index"><i class="bi bi-tools"></i>مساحة عمل المزود</a></li>
                 <li><a class="dropdown-item" asp-area="" asp-controller="ProviderAvailability" asp-action="Index">توفرّي للعمل</a></li>
+                <li><a class="dropdown-item" asp-area="" asp-controller="ProviderCalendar" asp-action="Index">تقويم العمل</a></li>
+                <li><a class="dropdown-item" asp-area="" asp-controller="MaintenanceRequests" asp-action="Index">طلباتي الشخصية</a></li>
+                <li><a class="dropdown-item" asp-area="" asp-controller="MaintenanceRequests" asp-action="Create">إنشاء طلب صيانة</a></li>
             }
             @if (!User.IsInRole(AppRoles.Admin))
             {
