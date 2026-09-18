@@ -1,0 +1,20 @@
+@model FixPal.Models.ViewModels.PagedResult<FixPal.Models.ViewModels.PortfolioItemViewModel>
+@{ ViewData["Title"] = "أعمالي"; }
+<div class="container fp-workspace">
+    <div class="fp-page-heading"><div><h1>أعمالي</h1><p>أعمال تنشرها بنفسك في ملفك العام. يمكنك إخفاؤها مع الاحتفاظ بالسجل.</p></div><a class="btn fp-btn-gold" asp-action="Create">+ إضافة عمل</a></div>
+    <partial name="_Flash" />
+    @if (Model.Items.Count == 0) { <div class="fp-empty"><h2>لم تضف أعمالًا بعد.</h2><p>أضف صورة مستقلة لعمل ترغب في عرضه للعامة.</p></div> }
+    <div class="fp-provider-grid">
+    @foreach (var item in Model.Items)
+    {
+        <article class="fp-provider-card">
+            <img src="@Url.Action("Image", new { id = item.Id })" alt="@item.Title" loading="lazy" style="width:100%;height:220px;object-fit:contain" />
+            <h2>@item.Title</h2><p class="fp-description">@item.Description</p>
+            <time data-utc="@item.CreatedAtUtc.ToString("yyyy-MM-ddTHH:mm:ssZ")">@item.CreatedAtUtc.ToString("u")</time>
+            @if (item.IsArchived) { <p class="fp-field-hint">مؤرشف — غير ظاهر للعامة</p> }
+            else { <form asp-action="Archive" asp-route-id="@item.Id" method="post" class="mt-3"><button class="btn fp-btn-ghost" type="submit">إخفاء من الملف العام</button></form> }
+        </article>
+    }
+    </div>
+    <nav class="fp-pagination">@if (Model.Page > 1) { <a asp-route-page="@(Model.Page - 1)">السابق</a> }<span>@Model.Page / @Model.TotalPages</span>@if (Model.Page < Model.TotalPages) { <a asp-route-page="@(Model.Page + 1)">التالي</a> }</nav>
+</div>

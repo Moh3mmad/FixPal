@@ -24,12 +24,19 @@ public class ProvidersController(ApplicationDbContext db) : Controller
         });
     }
     [HttpGet]
-    public async Task<IActionResult> Details(int id, int page = 1, CancellationToken ct = default)
+    public async Task<IActionResult> Details(int id, int page = 1, CancellationToken ct = default, int portfolioPage = 1)
     {
         var model = await db.ProviderProfiles.AsNoTracking()
             .Where(p => p.Id == id && p.ApprovalStatus == ApprovalStatus.Approved && p.Area!.City.IsActive)
             .Select(PublicProviderViewModel.Projection).SingleOrDefaultAsync(ct);
         if (model == null) return NotFound();
+        model.Portfolio = await PagedResult<PortfolioItemViewModel>.CreateAsync(db.ProviderPortfolioItems.AsNoTracking()
+            .Where(p => p.ProviderProfileId == id && !p.IsArchived
+                && FixPal.Services.ProviderEligibility.Active(db).Any(owner => owner.Id == p.ProviderProfileId))
+            .OrderByDescending(p => p.CreatedAtUtc).ThenByDescending(p => p.Id).Select(PortfolioItemViewModel.Projection), portfolioPage, ct, 6);
+        model.CompletedServiceCount = await new FixPal.Services.RequestAgreementPolicy(db).AgreedRequests
+            .CountAsync(r => r.ProviderProfileId == id && r.Status == MaintenanceRequestStatus.Completed && r.CompletedAtUtc != null
+                && db.RequestQuotes.Any(q => q.MaintenanceRequestId == r.Id && q.FinalPrice != null && q.FinalPriceAcceptedAtUtc != null), ct);
         model.Reviews = await PagedResult<PublicReviewItem>.CreateAsync(db.ProviderReviews.AsNoTracking().Where(r => r.ProviderProfileId == id)
             .OrderByDescending(r => r.CreatedAtUtc).ThenByDescending(r => r.Id).Select(r => new PublicReviewItem(r.Rating, r.Comment, r.CreatedAtUtc)), page, ct, 10);
         return View(model);

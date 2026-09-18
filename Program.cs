@@ -23,6 +23,7 @@ builder.Services.AddScoped<FixPal.Services.RequestDetailsService>();
 builder.Services.AddScoped<FixPal.Services.RequestCommerceService>();
 builder.Services.AddScoped<FixPal.Services.ProviderMatchingService>();
 builder.Services.AddScoped<FixPal.Services.IPrivateMediaStorage, FixPal.Services.LocalPrivateMediaStorage>();
+builder.Services.AddScoped<FixPal.Services.IPortfolioMediaStorage, FixPal.Services.PortfolioMediaStorage>();
 
 builder.Services.Configure<FixPal.Services.DiagnosisOptions>(builder.Configuration.GetSection("Diagnosis"));
 builder.Services.AddHttpClient<FixPal.Services.IProblemDiagnosisService, FixPal.Services.OpenAiProblemDiagnosisService>().ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });

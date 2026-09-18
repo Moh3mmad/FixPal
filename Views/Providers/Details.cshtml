@@ -27,9 +27,10 @@
             }
         </aside>
     </section>
+    <partial name="_ProviderPortfolio" model="Model" />
     <section class="fp-reviews mt-4" aria-labelledby="reviews-title"><div class="fp-section-heading"><h2 id="reviews-title">تجارب أصحاب الطلبات</h2><span>@Model.ReviewCount تقييم</span></div>
         @if (Model.Reviews.Items.Count == 0) { <p>لا توجد تقييمات منشورة بعد.</p> }
         @foreach (var review in Model.Reviews.Items) { <article class="border-bottom py-3"><div class="fp-review-heading"><strong>عميل أكمل الخدمة</strong><span class="fp-rating" aria-label="التقييم @review.Rating من 5">@review.Rating / 5</span></div><p class="fp-description">@review.Comment</p><time data-utc="@review.CreatedAtUtc.ToString("yyyy-MM-ddTHH:mm:ssZ")">@review.CreatedAtUtc.ToString("u")</time></article> }
-        <nav class="fp-pagination" aria-label="صفحات التقييمات">@if(Model.Reviews.Page>1) { <a asp-action="Details" asp-route-id="@Model.Id" asp-route-page="@(Model.Reviews.Page-1)">السابق</a> }<span>@Model.Reviews.Page / @Model.Reviews.TotalPages</span>@if(Model.Reviews.Page<Model.Reviews.TotalPages) { <a asp-action="Details" asp-route-id="@Model.Id" asp-route-page="@(Model.Reviews.Page+1)">التالي</a> }</nav>
+        <nav class="fp-pagination" aria-label="صفحات التقييمات">@if(Model.Reviews.Page>1) { <a asp-action="Details" asp-route-id="@Model.Id" asp-route-page="@(Model.Reviews.Page-1)" asp-route-portfolioPage="@Model.Portfolio.Page">السابق</a> }<span>@Model.Reviews.Page / @Model.Reviews.TotalPages</span>@if(Model.Reviews.Page<Model.Reviews.TotalPages) { <a asp-action="Details" asp-route-id="@Model.Id" asp-route-page="@(Model.Reviews.Page+1)" asp-route-portfolioPage="@Model.Portfolio.Page">التالي</a> }</nav>
     </section>
 </div>

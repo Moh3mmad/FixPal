@@ -1,0 +1,16 @@
+@model FixPal.Models.ViewModels.CreatePortfolioItemViewModel
+@{ ViewData["Title"] = "إضافة عمل"; }
+<div class="container fp-workspace">
+    <a asp-action="Index" class="fp-text-link">أعمالي</a>
+    <h1 class="mt-4">إضافة عمل</h1>
+    <p>سيظهر هذا العمل للعامة في ملفك. ارفع صورة مستقلة تملك حق نشرها، وتجنب بيانات العملاء والوجوه والمستندات.</p>
+    <form asp-action="Create" method="post" enctype="multipart/form-data" class="fp-detail-panel">
+        <div asp-validation-summary="All" class="text-danger"></div>
+        <div class="mb-3"><label asp-for="Title" class="form-label">عنوان العمل</label><input asp-for="Title" maxlength="120" class="form-control" /></div>
+        <div class="mb-3"><label asp-for="Description" class="form-label">وصف مختصر (اختياري)</label><textarea asp-for="Description" maxlength="500" class="form-control" rows="3"></textarea></div>
+        <div class="mb-3"><label asp-for="Image" class="form-label">صورة العمل (PNG / JPEG، حتى 5MB)</label><input asp-for="Image" type="file" accept="image/png,image/jpeg" class="form-control" /></div>
+        <p class="fp-field-hint">عمل منشور بواسطة المزود. لا تُنقل صور الطلبات الخاصة إلى هذا القسم.</p>
+        <button class="btn fp-btn-gold" type="submit">نشر في ملفي العام</button>
+    </form>
+</div>
+@section Scripts { <partial name="_ValidationScriptsPartial" /> }
