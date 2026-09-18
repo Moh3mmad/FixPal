@@ -1,0 +1,197 @@
+.dalil-assistant {
+    position: fixed;
+    inset: 0;
+    z-index: 1090;
+    display: grid;
+    justify-items: end;
+    color: var(--fp-text, #17354b);
+    font-family: 'Cairo', system-ui, sans-serif;
+}
+
+.dalil-assistant[hidden] { display: none; }
+
+.dalil-assistant__backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgb(8 43 74 / 42%);
+}
+
+.dalil-assistant__panel {
+    position: relative;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto auto;
+    width: min(440px, 100vw);
+    height: 100dvh;
+    background: var(--fp-surface, #fff);
+    border-inline-start: 1px solid var(--fp-border, #deded5);
+    box-shadow: -10px 0 30px rgb(8 43 74 / 14%);
+}
+
+.dalil-assistant__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1rem 1.1rem;
+    color: #fff;
+    background: var(--fp-navy, #082b4a);
+    border-block-end: 3px solid var(--fp-orange, #ff9200);
+}
+
+.dalil-assistant__identity { display: flex; align-items: center; gap: .75rem; min-width: 0; }
+.dalil-assistant__identity h2 { margin: 0; color: #fff; font-size: 1.05rem; font-weight: 800; }
+.dalil-assistant__identity p { margin: .15rem 0 0; color: rgb(255 255 255 / 78%); font-size: .76rem; }
+.dalil-assistant__mark {
+    display: grid;
+    place-items: center;
+    flex: 0 0 38px;
+    height: 40px;
+    color: var(--fp-navy, #082b4a);
+    background: var(--fp-orange, #ff9200);
+    border-radius: 8px;
+    font-size: 1.25rem;
+    font-weight: 800;
+}
+
+.dalil-assistant__close {
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    color: #fff;
+    background: transparent;
+    border: 1px solid rgb(255 255 255 / 30%);
+    border-radius: 6px;
+    font-size: 1.7rem;
+    line-height: 1;
+}
+.dalil-assistant__close:hover { background: rgb(255 255 255 / 10%); }
+.dalil-assistant__close:focus-visible,
+.dalil-assistant__composer textarea:focus-visible,
+.dalil-assistant__composer button:focus-visible { outline: 3px solid #ffbd61; outline-offset: 2px; }
+
+.dalil-assistant__messages {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 1.15rem;
+    background: #faf8f3;
+    scrollbar-gutter: stable;
+}
+
+.dalil-assistant__intro {
+    margin-block: 1.25rem 1.75rem;
+    padding: 1rem;
+    background: #fff;
+    border: 1px solid var(--fp-border, #deded5);
+    border-inline-start: 3px solid var(--fp-orange, #ff9200);
+    border-radius: 8px;
+    line-height: 1.8;
+}
+.dalil-assistant__intro strong { display: block; color: var(--fp-navy, #082b4a); font-size: .94rem; }
+.dalil-assistant__intro p { margin: .45rem 0; font-size: .85rem; }
+.dalil-assistant__intro small { color: var(--fp-muted, #5f686c); font-size: .74rem; }
+
+.dalil-assistant__message { display: flex; margin-block: .7rem; }
+.dalil-assistant__message--user { justify-content: flex-start; }
+.dalil-assistant__message--assistant { justify-content: flex-end; }
+.dalil-assistant__bubble {
+    max-width: 86%;
+    padding: .72rem .85rem;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    border: 1px solid var(--fp-border, #deded5);
+    border-radius: 9px;
+    font-size: .86rem;
+    line-height: 1.8;
+}
+.dalil-assistant__message--user .dalil-assistant__bubble {
+    color: #fff;
+    background: var(--fp-navy, #082b4a);
+    border-color: var(--fp-navy, #082b4a);
+    border-start-start-radius: 2px;
+}
+.dalil-assistant__message--assistant .dalil-assistant__bubble {
+    background: #fff;
+    border-start-end-radius: 2px;
+}
+.dalil-assistant__details {
+    display: grid;
+    gap: .35rem;
+    margin-block-start: .6rem;
+    padding-block-start: .55rem;
+    color: var(--fp-muted, #5f686c);
+    border-block-start: 1px solid var(--fp-border, #deded5);
+    font-size: .75rem;
+}
+.dalil-assistant__details strong { color: var(--fp-navy, #082b4a); }
+
+.dalil-assistant__status {
+    min-height: 1.4rem;
+    padding-inline: 1rem;
+    color: #a33434;
+    background: #fff;
+    font-size: .78rem;
+}
+.dalil-assistant__typing { display: flex; gap: .25rem; padding: .25rem 1.1rem .55rem; background: #fff; }
+.dalil-assistant__typing[hidden] { display: none; }
+.dalil-assistant__typing span { width: 6px; height: 6px; background: #607887; border-radius: 50%; animation: dalil-pulse 1s ease-in-out infinite; }
+.dalil-assistant__typing span:nth-child(2) { animation-delay: .14s; }
+.dalil-assistant__typing span:nth-child(3) { animation-delay: .28s; }
+
+.dalil-assistant__composer {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: end;
+    gap: .55rem;
+    padding: .8rem;
+    padding-block-end: max(.8rem, env(safe-area-inset-bottom));
+    background: #fff;
+    border-block-start: 1px solid var(--fp-border, #deded5);
+}
+.dalil-assistant__composer textarea {
+    width: 100%;
+    min-height: 48px;
+    max-height: 132px;
+    resize: none;
+    padding: .65rem .75rem;
+    color: var(--fp-text, #17354b);
+    background: #fff;
+    border: 1px solid #aeb9be;
+    border-radius: 7px;
+    font: inherit;
+    font-size: .86rem;
+    line-height: 1.7;
+}
+.dalil-assistant__composer button {
+    min-width: 88px;
+    min-height: 48px;
+    padding: .55rem .8rem;
+    color: var(--fp-navy, #082b4a);
+    background: var(--fp-orange, #ff9200);
+    border: 1px solid var(--fp-orange, #ff9200);
+    border-radius: 6px;
+    font: inherit;
+    font-size: .83rem;
+    font-weight: 800;
+}
+.dalil-assistant__composer button:disabled { cursor: wait; opacity: .62; }
+
+@keyframes dalil-pulse {
+    0%, 100% { opacity: .35; transform: translateY(0); }
+    50% { opacity: 1; transform: translateY(-2px); }
+}
+
+@media (max-width: 575.98px) {
+    .dalil-assistant__panel { width: 100vw; height: 100dvh; border: 0; box-shadow: none; }
+    .dalil-assistant__header { padding: .75rem .85rem; }
+    .dalil-assistant__messages { padding: .8rem; }
+    .dalil-assistant__bubble { max-width: 92%; }
+    .dalil-assistant__composer { grid-template-columns: minmax(0, 1fr) 72px; padding: .65rem; }
+    .dalil-assistant__composer button { min-width: 0; }
+    .dalil-assistant__composer button span:last-child { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .dalil-assistant__typing span { animation: none; }
+}
