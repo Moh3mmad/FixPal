@@ -29,6 +29,7 @@ public class RequestDetailsViewModel : RequestSummaryViewModel
     public PagedResult<QuoteHistoryItem> QuoteHistory { get; set; } = new();
     public double? Latitude { get; set; }
     public double? Longitude { get; set; }
+    public bool CanViewProblemLocation { get; set; }
     public string Description { get; set; } = string.Empty;
     public DateTime? AcceptedAtUtc { get; set; }
     public DateTime? StartedAtUtc { get; set; }
@@ -40,7 +41,6 @@ public class RequestDetailsViewModel : RequestSummaryViewModel
     public static Expression<Func<MaintenanceRequest, RequestDetailsViewModel>> DetailProjection => r => new()
     {
         Id = r.Id, IsLegacy = r.IsLegacy, Title = r.Title, Description = r.Description, Category = r.ServiceCategory.Name,
-        Latitude = r.Latitude, Longitude = r.Longitude,
         Location = r.Area.Name + " — " + r.Area.City.Name,
         ProviderName = r.ProviderProfile == null ? null : r.ProviderProfile.DisplayName,
         RequestType = r.RequestType, Status = r.Status, CreatedAtUtc = r.CreatedAtUtc,

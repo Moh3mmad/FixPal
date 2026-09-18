@@ -436,6 +436,10 @@ public sealed class SqlSchedulingFixture : IAsyncLifetime
         services.AddDbContext<ApplicationDbContext>(o => o.UseSqlServer(ConnectionString));
         services.AddIdentityCore<ApplicationUser>().AddRoles<IdentityRole>()
             .AddEntityFrameworkStores<ApplicationDbContext>();
+        services.AddSingleton<Microsoft.Extensions.Configuration.IConfiguration>(new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build());
+        services.AddScoped<AccountPhoneService>();
+        services.AddScoped<RequestCommunicationPolicy>();
+        services.AddScoped<RequestDetailsService>();
         services.AddScoped<RequestAccessService>();
         services.AddScoped<RequestAgreementPolicy>();
         services.AddScoped<RequestMutationService>();
@@ -672,6 +676,8 @@ public sealed class TestScenario(
     string unrelatedId,
     DateTimeOffset now) : IAsyncDisposable
 {
+    public ApplicationDbContext Db => db;
+    public IServiceProvider Services => scope.ServiceProvider;
     public int RequestId => requestId;
     public int ProviderProfileId => providerProfileId;
     public string CustomerId => customerId;

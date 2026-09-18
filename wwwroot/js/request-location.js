@@ -2,7 +2,7 @@
     const latitude = document.getElementById('Latitude'), longitude = document.getElementById('Longitude');
     if (!latitude || !longitude) return;
     const status = document.getElementById('location-status'), holder = document.getElementById('request-map');
-    let map, marker, loading;
+    let map, marker;
     function setPoint(lat, lng) {
         latitude.value = lat.toFixed(5); longitude.value = lng.toFixed(5);
         status.textContent = `تم تحديد نقطة خاصة (${latitude.value}, ${longitude.value}). راجع المدينة والمنطقة قبل الإرسال.`;
@@ -27,30 +27,12 @@
         }, () => { gps.disabled = false; status.textContent = 'لم نحصل على الموقع. اختر نقطة على الخريطة أو تابع يدويًا.'; },
         { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 });
     });
-    function leaflet() {
-        if (window.L) return Promise.resolve();
-        if (loading) return loading;
-        loading = new Promise((resolve, reject) => {
-            const css = document.createElement('link'); css.rel = 'stylesheet';
-            css.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-            css.integrity = 'sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY='; css.crossOrigin = '';
-            const script = document.createElement('script'); script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
-            script.integrity = 'sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo='; script.crossOrigin = '';
-            let cssReady = false, jsReady = false;
-            const timer = setTimeout(() => reject(new Error('Map timeout')), 10000);
-            const done = () => { if (cssReady && jsReady) { clearTimeout(timer); resolve(); } };
-            css.onload = () => { cssReady = true; done(); }; script.onload = () => { jsReady = true; done(); };
-            css.onerror = script.onerror = () => { clearTimeout(timer); reject(new Error('Map unavailable')); };
-            document.head.append(css); document.head.append(script);
-        });
-        return loading;
-    }
     const open = document.getElementById('open-map');
     open.addEventListener('click', async () => {
         if (map) { holder.hidden = !holder.hidden; if (!holder.hidden) map.invalidateSize(); return; }
         open.disabled = true; status.textContent = 'جارٍ تحميل الخريطة…';
         try {
-            await leaflet(); holder.hidden = false;
+            await window.fixPalLeaflet(); holder.hidden = false;
             // Jerusalem is the initial demo viewport only; the map can be panned worldwide.
             map = L.map(holder, { scrollWheelZoom: false }).setView([31.77, 35.22], 12);
             const tiles = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, updateWhenIdle: true, keepBuffer: 1,

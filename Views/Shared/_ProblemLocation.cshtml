@@ -1,0 +1,30 @@
+@model FixPal.Models.ViewModels.RequestDetailsViewModel
+@using System.Globalization
+<section class="fp-detail-panel mt-3" aria-labelledby="problem-location-title">
+    <h2 id="problem-location-title">موقع المشكلة</h2>
+    <p>@Model.Location</p>
+    @if (Model.CanViewProblemLocation && Model.Latitude.HasValue && Model.Longitude.HasValue)
+    {
+        var latitude = Model.Latitude.Value.ToString("F5", CultureInfo.InvariantCulture);
+        var longitude = Model.Longitude.Value.ToString("F5", CultureInfo.InvariantCulture);
+        <p><bdi>@latitude, @longitude</bdi></p>
+        <div class="d-flex flex-wrap gap-2">
+            <button type="button" class="btn fp-btn-ghost" id="show-problem-map">عرض الخريطة</button>
+            <a class="btn fp-btn-ghost" href="https://www.google.com/maps/dir/?api=1&amp;destination=@latitude,@longitude" target="_blank" rel="noopener noreferrer">فتح الاتجاهات</a>
+        </div>
+        <div id="problem-location-map" class="fp-map" hidden data-latitude="@latitude" data-longitude="@longitude" aria-label="خريطة موقع المشكلة"></div>
+        <p id="problem-map-status" class="fp-field-hint" role="status">فتح الخريطة يحمّل خرائط OpenStreetMap من خدمة خارجية. فتح الاتجاهات يشارك النقطة مع خدمة الخرائط.</p>
+    }
+    else if (Model.CanViewProblemLocation)
+    {
+        <p class="fp-field-hint">لم يُحدد موقع دقيق لهذا الطلب. يمكنك الرجوع إلى المدينة والمنطقة.</p>
+    }
+    else
+    {
+        <p class="fp-field-hint">الموقع الدقيق خاص، ويظهر فقط للمزود المعيّن بعد قبول الاتفاق وأثناء الخدمة النشطة.</p>
+    }
+    @if (Model.IsOwner)
+    {
+        <p class="fp-field-hint">موقع المشكلة ثابت بعد إرسال الطلب ولا يمكن تغييره ضمن هذا الطلب.</p>
+    }
+</section>

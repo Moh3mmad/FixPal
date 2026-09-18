@@ -19,6 +19,23 @@ public class RequestDetailsService(ApplicationDbContext db, RequestAccessService
         model.Quote = await db.RequestQuotes.AsNoTracking().Include(q => q.CurrentRevision).Include(q => q.AcceptedRevision).SingleOrDefaultAsync(q => q.MaintenanceRequestId == id, ct);
         model.Review = await db.ProviderReviews.AsNoTracking().SingleOrDefaultAsync(r => r.MaintenanceRequestId == id, ct);
         model.HasAgreement = await agreement.AgreedRequests.AnyAsync(r => r.Id == id, ct);
+        // Never put private coordinates in the general details projection.
+        // Recheck current ownership, assignment, agreement and state in the location query.
+        var actorId = user.FindFirstValue(ClaimTypes.NameIdentifier);
+        var location = await db.MaintenanceRequests.AsNoTracking().Where(r => r.Id == id
+            && (r.CustomerId == actorId || (grant.IsProvider
+                && r.ProviderProfile != null && r.ProviderProfile.UserId == actorId
+                && (r.Status == MaintenanceRequestStatus.Accepted || r.Status == MaintenanceRequestStatus.InProgress)
+                && agreement.AgreedRequests.Any(a => a.Id == r.Id))))
+            .Select(r => new { r.Latitude, r.Longitude }).SingleOrDefaultAsync(ct);
+        model.CanViewProblemLocation = location != null;
+        if (location?.Latitude is double latitude && location.Longitude is double longitude
+            && double.IsFinite(latitude) && double.IsFinite(longitude)
+            && latitude is >= -90 and <= 90 && longitude is >= -180 and <= 180)
+        {
+            model.Latitude = latitude;
+            model.Longitude = longitude;
+        }
         model.CanReview = grant.IsOwner && await agreement.CanReviewAsync(id, ct);
         model.CanDecideQuote = grant.IsOwner && !grant.IsProvider && model.Status == MaintenanceRequestStatus.Accepted
             && await ProviderEligibility.ForRequest(db, grant.Request.ServiceCategoryId, grant.Request.AreaId, grant.Request.CustomerId).AnyAsync(p => p.Id == grant.Request.ProviderProfileId, ct);
