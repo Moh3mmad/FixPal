@@ -32,6 +32,73 @@
             container.append(line);
         };
 
+        const addProviders = (container, providers) => {
+            if (!Array.isArray(providers) || !providers.length) return;
+            const section = document.createElement('section');
+            section.className = 'dalil-assistant__providers';
+            const title = document.createElement('strong');
+            title.className = 'dalil-assistant__providers-title';
+            title.textContent = 'مزودون مطابقون من صلّحلي';
+            section.append(title);
+
+            if (providers[0]?.matchScope === 'SameCity') {
+                const fallback = document.createElement('p');
+                fallback.className = 'dalil-assistant__providers-note';
+                fallback.textContent = 'لم نجد مزودًا مطابقًا داخل منطقتك، وهذه خيارات من نفس المدينة.';
+                section.append(fallback);
+            }
+
+            providers.forEach((provider) => {
+                const card = document.createElement('article');
+                card.className = 'dalil-assistant__provider';
+                const name = document.createElement('strong');
+                name.textContent = String(provider.displayName || 'مزود خدمة');
+                const specialty = document.createElement('span');
+                specialty.textContent = String(provider.specialty || '');
+                const location = document.createElement('span');
+                location.textContent = [provider.area, provider.city].filter(Boolean).join(' — ');
+                const scope = document.createElement('span');
+                scope.className = 'dalil-assistant__provider-scope';
+                scope.textContent = provider.matchScope === 'SameCity'
+                    ? 'خيار من نفس المدينة'
+                    : 'ضمن منطقتك';
+                const availability = document.createElement('span');
+                availability.textContent = String(provider.availabilityLabel || '');
+                const rating = document.createElement('span');
+                rating.className = 'dalil-assistant__provider-rating';
+                rating.textContent = provider.averageRating == null
+                    ? 'لا توجد تقييمات بعد'
+                    : `★ ${Number(provider.averageRating).toFixed(1)} / 5`;
+                const reviews = document.createElement('span');
+                reviews.textContent = provider.averageRating == null
+                    ? ''
+                    : `${Number(provider.reviewCount) || 0} تقييم`;
+                card.append(name, specialty, location, scope, availability, rating, reviews);
+
+                const actions = document.createElement('div');
+                actions.className = 'dalil-assistant__provider-actions';
+
+                if (typeof provider.profileUrl === 'string'
+                    && provider.profileUrl.startsWith('/Providers/Details/')) {
+                    const link = document.createElement('a');
+                    link.href = provider.profileUrl;
+                    link.textContent = 'عرض الملف الشخصي';
+                    actions.append(link);
+                }
+                if (typeof provider.requestUrl === 'string'
+                    && provider.requestUrl.startsWith('/MaintenanceRequests/Create?')) {
+                    const requestLink = document.createElement('a');
+                    requestLink.href = provider.requestUrl;
+                    requestLink.className = 'dalil-assistant__provider-request';
+                    requestLink.textContent = 'تقديم طلب صيانة';
+                    actions.append(requestLink);
+                }
+                if (actions.childElementCount) card.append(actions);
+                section.append(card);
+            });
+            container.append(section);
+        };
+
         const addMessage = (role, text, response) => {
             const row = document.createElement('div');
             row.className = `dalil-assistant__message dalil-assistant__message--${role}`;
@@ -43,8 +110,14 @@
                 const details = document.createElement('div');
                 details.className = 'dalil-assistant__details';
                 addDetail(details, 'التخصص المقترح', response.suggestedCategory);
+                addDetail(details, 'الموقع', [response.suggestedArea, response.suggestedCity]
+                    .filter(Boolean).join(' — '));
                 addDetail(details, 'الخطوة التالية', response.nextStep);
+                if (response.locationRequired) {
+                    addDetail(details, 'الموقع مطلوب', 'اكتب مدينتك ومنطقتك لعرض مزودين مطابقين.');
+                }
                 if (details.childElementCount) bubble.append(details);
+                addProviders(bubble, response.providers);
             }
 
             row.append(bubble);
@@ -98,7 +171,9 @@
                     return;
                 }
                 addMessage('assistant', payload.reply, payload);
-                conversation.push({ role: 'assistant', content: payload.reply });
+                if (typeof payload.historyReply === 'string' && payload.historyReply.trim()) {
+                    conversation.push({ role: 'assistant', content: payload.historyReply.trim() });
+                }
                 compactConversation();
             } catch {
                 status.textContent = 'تعذر الاتصال بدليل. تحقق من الاتصال وحاول مرة أخرى.';

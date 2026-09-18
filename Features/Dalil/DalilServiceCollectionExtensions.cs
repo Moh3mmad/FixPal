@@ -10,6 +10,8 @@ public static class DalilServiceCollectionExtensions
             .Bind(configuration.GetSection(DalilAssistantOptions.SectionName));
         services.AddHttpClient<IDalilAssistantService, GeminiDalilAssistantService>()
             .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+        services.AddScoped<IDalilSafeContextService, DalilSafeContextService>();
+        services.AddScoped<IDalilProviderRecommendationService, DalilProviderRecommendationService>();
         return services;
     }
 }

@@ -32,7 +32,7 @@ using FixPal.Features.Dalil;
 builder.Services.AddDalilAssistant(builder.Configuration);
 ```
 
-The extension registers `IDalilAssistantService` through a typed `HttpClient` backed by `GeminiDalilAssistantService`. The controller depends only on the provider-neutral interface.
+The extension registers `IDalilAssistantService` through a typed `HttpClient` backed by `GeminiDalilAssistantService`, plus the narrow read-only context and recommendation services. It reuses the application's existing `ProviderMatchingService` registration.
 
 ## C. Configuration
 
@@ -41,10 +41,10 @@ Supported configuration keys:
 | Key | Purpose | Default |
 | --- | --- | --- |
 | `Dalil:GeminiApiKey` | Server-side Gemini credential | none |
-| `Dalil:Model` | Gemini model name | `gemini-2.5-flash` |
+| `Dalil:Model` | Gemini model name | `gemini-3.5-flash-lite` |
 | `Dalil:Endpoint` | Gemini REST base URL | `https://generativelanguage.googleapis.com/v1beta/` |
 | `Dalil:TimeoutSeconds` | Per-request timeout | `20` |
-| `Dalil:MaxOutputTokens` | Output token ceiling | `700` |
+| `Dalil:MaxOutputTokens` | Output token ceiling | `1024` |
 | `Dalil:Temperature` | Generation temperature | `0.2` |
 
 Store a development credential with user secrets:
@@ -80,9 +80,9 @@ When the key is absent, configuration is invalid, Gemini times out, Gemini retur
 
 ## F. Future safe context
 
-`DalilSafeContext` accepts deliberately bounded public DTOs for service categories, locations, public provider summaries, and help content. A future integration layer may populate these DTOs from approved read services before calling `IDalilAssistantService`.
+`DalilSafeContextService` uses explicit no-tracking projections to load only service-category names/descriptions and active city/area names. Gemini receives only those catalog values and never receives provider records. AI category and location suggestions are matched back to that catalog before the existing `ProviderMatchingService` can run. Provider recommendations are returned directly by the backend through a dedicated public DTO.
 
-Gemini must never receive `ApplicationDbContext`, unrestricted queries, EF entities, private request data, customer contact data, message history, or credentials. Dalil itself has no database dependency.
+Gemini never receives `ApplicationDbContext`, unrestricted queries, EF entities, provider records, private request data, customer contact data, message history, or credentials. The context service has narrow read-only database access and cannot perform arbitrary AI-directed queries.
 
 ## G. Future Create Request replacement
 

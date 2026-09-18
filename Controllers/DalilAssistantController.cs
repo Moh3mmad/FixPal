@@ -3,12 +3,15 @@ using FixPal.Models.ViewModels.Dalil;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using System.Security.Claims;
 
 namespace FixPal.Controllers;
 
 [Authorize, ResponseCache(Location = ResponseCacheLocation.None, NoStore = true)]
 public sealed class DalilAssistantController(
     IDalilAssistantService assistant,
+    IDalilSafeContextService safeContext,
+    IDalilProviderRecommendationService recommendations,
     ILogger<DalilAssistantController> logger) : Controller
 {
     private const int MaximumMessages = 12;
@@ -23,10 +26,34 @@ public sealed class DalilAssistantController(
 
         try
         {
-            var result = await assistant.RespondAsync(new DalilAssistantRequest(messages), cancellationToken);
-            return result is { Outcome: DalilOutcome.Success, Answer: not null }
-                ? Ok(DalilChatResponse.From(result.Answer))
-                : StatusCode(StatusCodes.Status503ServiceUnavailable, DalilChatResponse.Unavailable());
+            var catalog = await safeContext.GetAsync(cancellationToken);
+            var result = await assistant.RespondAsync(
+                new DalilAssistantRequest(messages, catalog.ToAssistantContext()), cancellationToken);
+            if (result is not { Outcome: DalilOutcome.Success, Answer: not null })
+                return StatusCode(StatusCodes.Status503ServiceUnavailable, DalilChatResponse.Unavailable());
+
+            var category = catalog.ResolveCategory(result.Answer.SuggestedCategory);
+            var area = catalog.ResolveArea(result.Answer.SuggestedCity, result.Answer.SuggestedArea);
+            IReadOnlyList<DalilProviderRecommendation> providers = [];
+            if (category != null && area != null)
+            {
+                providers = await recommendations.FindAsync(
+                    category.Id,
+                    area.Id,
+                    area.CityId,
+                    area.CityName,
+                    User.FindFirstValue(ClaimTypes.NameIdentifier),
+                    cancellationToken);
+            }
+
+            var locationRequired = category != null && area == null;
+            return Ok(DalilChatResponse.From(
+                result.Answer,
+                category?.Name,
+                area?.CityName,
+                area?.Name,
+                locationRequired,
+                providers));
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
