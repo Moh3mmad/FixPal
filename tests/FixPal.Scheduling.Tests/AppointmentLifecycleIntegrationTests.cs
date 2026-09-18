@@ -440,6 +440,7 @@ public sealed class SqlSchedulingFixture : IAsyncLifetime
         services.AddScoped<AccountPhoneService>();
         services.AddScoped<RequestCommunicationPolicy>();
         services.AddScoped<RequestDetailsService>();
+        services.AddScoped<RequestEvidencePolicy>();
         services.AddScoped<RequestAccessService>();
         services.AddScoped<RequestAgreementPolicy>();
         services.AddScoped<RequestMutationService>();

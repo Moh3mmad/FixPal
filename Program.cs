@@ -15,6 +15,7 @@ builder.Services.AddScoped<FixPal.Services.AppointmentService>();
 builder.Services.AddScoped<FixPal.Services.AccountPhoneService>();
 builder.Services.AddScoped<FixPal.Services.RequestCommunicationPolicy>();
 builder.Services.AddScoped<FixPal.Services.RequestAccessService>();
+builder.Services.AddScoped<FixPal.Services.RequestEvidencePolicy>();
 builder.Services.AddScoped<FixPal.Services.RequestMutationService>();
 builder.Services.AddScoped<FixPal.Services.RequestAgreementPolicy>();
 builder.Services.AddScoped<FixPal.Services.RequestWorkflowService>();

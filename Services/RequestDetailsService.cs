@@ -14,6 +14,15 @@ public class RequestDetailsService(ApplicationDbContext db, RequestAccessService
         var model = await db.MaintenanceRequests.AsNoTracking().Where(r => r.Id == id).Select(RequestDetailsViewModel.DetailProjection).SingleAsync(ct);
         model.Communication = await communication.GetAsync(grant, user, ct);
         model.IsOwner = grant.IsOwner;
+        model.Evidence = await db.RequestEvidence.AsNoTracking().Where(e => e.MaintenanceRequestId == id)
+            .GroupBy(e => e.MaintenanceRequestId).Select(g => new EvidenceSummary
+            {
+                BeforeCount = g.Count(e => e.OwnershipChecked && e.Kind == EvidenceKind.Before),
+                AfterCount = g.Count(e => e.OwnershipChecked && e.Kind == EvidenceKind.After),
+                GeneralCount = g.Count(e => !e.OwnershipChecked || (e.Kind != EvidenceKind.Before && e.Kind != EvidenceKind.After)),
+                BeforeImageId = g.Max(e => e.OwnershipChecked && e.Kind == EvidenceKind.Before ? (int?)e.Id : null),
+                AfterImageId = g.Max(e => e.OwnershipChecked && e.Kind == EvidenceKind.After ? (int?)e.Id : null)
+            }).SingleOrDefaultAsync(ct) ?? new();
         model.CanManage = grant.IsProvider && !grant.IsOwner
             && await ProviderEligibility.ForRequest(db, grant.Request.ServiceCategoryId, grant.Request.AreaId, grant.Request.CustomerId).AnyAsync(p => p.Id == grant.Request.ProviderProfileId, ct);
         model.Quote = await db.RequestQuotes.AsNoTracking().Include(q => q.CurrentRevision).Include(q => q.AcceptedRevision).SingleOrDefaultAsync(q => q.MaintenanceRequestId == id, ct);

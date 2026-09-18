@@ -1,0 +1,18 @@
+@model FixPal.Models.ViewModels.RequestDetailsViewModel
+<section class="fp-detail-panel mt-3" aria-labelledby="work-images-title">
+    <div class="fp-section-heading"><h2 id="work-images-title">🖼 صور العمل</h2><a class="btn fp-btn-ghost" asp-controller="RequestEvidence" asp-action="Index" asp-route-id="@Model.Id">عرض الصور / إضافة صورة</a></div>
+    <p class="fp-field-hint">صور اختيارية وخاصة بالطلب. لا يلزم رفع صورة لإكمال العمل.</p>
+    <div class="row g-3">
+        @foreach (var side in new[] { (Title: "قبل العمل", Owner: "من العميل", Count: Model.Evidence.BeforeCount, ImageId: Model.Evidence.BeforeImageId), (Title: "بعد العمل", Owner: "من مزود الخدمة", Count: Model.Evidence.AfterCount, ImageId: Model.Evidence.AfterImageId) })
+        {
+            <div class="col-md-6"><h3>@side.Title</h3><p>@side.Owner · @side.Count صورة</p>
+            @if (side.ImageId.HasValue)
+            {
+                <a asp-controller="RequestEvidence" asp-action="Index" asp-route-id="@Model.Id"><img src="@Url.Action("Image", "RequestEvidence", new { id = side.ImageId })" alt="@side.Title — @side.Owner" loading="lazy" style="width:100%;height:180px;object-fit:contain" /></a>
+            }
+            else { <p class="fp-field-hint">لم تُضف صورة لهذه المرحلة.</p> }
+            </div>
+        }
+    </div>
+    @if (Model.Evidence.GeneralCount > 0) { <p class="fp-field-hint">صور عامة / سابقة: @Model.Evidence.GeneralCount — متاحة في صفحة الصور دون افتراض مرحلتها.</p> }
+</section>

@@ -21,6 +21,7 @@ public class RequestSummaryViewModel
 }
 public class RequestDetailsViewModel : RequestSummaryViewModel
 {
+    public EvidenceSummary Evidence { get; set; } = new();
     public CommunicationState Communication { get; set; } = new();
     public bool IsLegacy { get; set; }
     public bool HasAgreement { get; set; }
@@ -48,5 +49,13 @@ public class RequestDetailsViewModel : RequestSummaryViewModel
     };
 }
 public record ClaimableRequestItem(int Id, string Category, string Location, DateTime CreatedAtUtc);
+public class EvidenceSummary
+{
+    public int BeforeCount { get; set; }
+    public int AfterCount { get; set; }
+    public int GeneralCount { get; set; }
+    public int? BeforeImageId { get; set; }
+    public int? AfterImageId { get; set; }
+}
 public record QuoteHistoryItem(int Number, decimal MinimumPrice, decimal MaximumPrice, string? Note, DateTime CreatedAtUtc,
     QuoteState? Decision, string? DecisionNote, DateTime? DecidedAtUtc);
