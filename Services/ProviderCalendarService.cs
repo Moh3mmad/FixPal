@@ -5,6 +5,7 @@ using FixPal.Models;
 using FixPal.Models.Enums;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 
 namespace FixPal.Services;
 
@@ -34,135 +35,367 @@ public sealed class ProviderCalendarService(
     }
 
     public async Task<ProviderCalendarResult> CreateAsync(ClaimsPrincipal user,
-        CreateProviderCalendarCommand command, CancellationToken ct)
+    CreateProviderCalendarCommand command, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(command);
         var providerId = await ResolveActiveProviderAsync(user, ct);
         if (providerId == null) return Result(ProviderCalendarStatus.Forbidden);
+
         EnsureIndependentWrite();
+
         var submittedPeriods = command.WorkingPeriods?.ToArray();
+        var strategy = db.Database.CreateExecutionStrategy();
+
         ProviderCalendar? addedCalendar = null;
         var addedPeriods = new List<ProviderWorkingPeriod>();
+
+        var commitAttempted = false;
+        string? attemptedTimeZoneId = null;
+        var attemptedIsEnabled = false;
+        DateTimeOffset attemptedUpdatedAtUtc = default;
+        CalendarWorkingPeriod[] attemptedPeriods = Array.Empty<CalendarWorkingPeriod>();
+
         try
         {
-            await using var tx = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
-            // The calendar may not exist yet. Its owning profile serializes initial creation.
-            var profile = await db.ProviderProfiles.FromSqlInterpolated(
-                $"SELECT * FROM [ProviderProfiles] WITH (UPDLOCK, HOLDLOCK) WHERE [Id] = {providerId.Value}")
-                .AsNoTracking().SingleOrDefaultAsync(ct);
-            if (profile == null || await ResolveActiveProviderAsync(user, ct) != providerId)
-                return Result(ProviderCalendarStatus.Forbidden);
-            if (await db.ProviderCalendars.AsNoTracking().AnyAsync(c => c.ProviderProfileId == providerId, ct))
-                return Error(ProviderCalendarStatus.Conflict, string.Empty, "CalendarAlreadyExists");
-
-            var errors = new List<ProviderCalendarError>();
-            var zone = ResolveTimeZone(command.TimeZoneId, errors);
-            var periods = ValidatePeriods(submittedPeriods, command.IsEnabled, errors);
-            if (errors.Count != 0) return new(ProviderCalendarStatus.ValidationFailed, errors.AsReadOnly());
-
-            addedCalendar = new ProviderCalendar
+            return await strategy.ExecuteAsync(async () =>
             {
-                ProviderProfileId = providerId.Value, TimeZoneId = zone!.Id,
-                IsEnabled = command.IsEnabled, UpdatedAtUtc = timeProvider.GetUtcNow()
-            };
-            db.ProviderCalendars.Add(addedCalendar);
-            addedPeriods.AddRange(ToEntities(providerId.Value, periods));
-            db.ProviderWorkingPeriods.AddRange(addedPeriods);
-            await db.SaveChangesAsync(ct);
-            await tx.CommitAsync(ct);
-            return Result(ProviderCalendarStatus.Success);
+                ct.ThrowIfCancellationRequested();
+
+                db.ChangeTracker.Clear();
+                addedCalendar = null;
+                addedPeriods.Clear();
+
+                if (commitAttempted && attemptedTimeZoneId != null)
+                {
+                    if (await MatchesCommittedStateAsync(
+                            providerId.Value,
+                            attemptedTimeZoneId,
+                            attemptedIsEnabled,
+                            attemptedUpdatedAtUtc,
+                            attemptedPeriods,
+                            ct))
+                    {
+                        return Result(ProviderCalendarStatus.Success);
+                    }
+
+                    commitAttempted = false;
+                }
+
+                await using var tx = await db.Database.BeginTransactionAsync(
+                    IsolationLevel.Serializable, ct);
+
+                // The calendar may not exist yet. Its owning profile serializes initial creation.
+                var profile = await db.ProviderProfiles.FromSqlInterpolated(
+                        $"SELECT * FROM [ProviderProfiles] WITH (UPDLOCK, HOLDLOCK) WHERE [Id] = {providerId.Value}")
+                    .AsNoTracking()
+                    .SingleOrDefaultAsync(ct);
+
+                if (profile == null
+                    || await ResolveActiveProviderAsync(user, ct) != providerId)
+                {
+                    return Result(ProviderCalendarStatus.Forbidden);
+                }
+
+                if (await db.ProviderCalendars.AsNoTracking()
+                    .AnyAsync(c => c.ProviderProfileId == providerId.Value, ct))
+                {
+                    return Error(
+                        ProviderCalendarStatus.Conflict,
+                        string.Empty,
+                        "CalendarAlreadyExists");
+                }
+
+                var errors = new List<ProviderCalendarError>();
+                var zone = ResolveTimeZone(command.TimeZoneId, errors);
+                var periods = ValidatePeriods(
+                    submittedPeriods,
+                    command.IsEnabled,
+                    errors);
+
+                if (errors.Count != 0)
+                {
+                    return new(
+                        ProviderCalendarStatus.ValidationFailed,
+                        errors.AsReadOnly());
+                }
+
+                var now = timeProvider.GetUtcNow();
+
+                addedCalendar = new ProviderCalendar
+                {
+                    ProviderProfileId = providerId.Value,
+                    TimeZoneId = zone!.Id,
+                    IsEnabled = command.IsEnabled,
+                    UpdatedAtUtc = now
+                };
+
+                db.ProviderCalendars.Add(addedCalendar);
+
+                addedPeriods.AddRange(
+                    ToEntities(providerId.Value, periods));
+
+                db.ProviderWorkingPeriods.AddRange(addedPeriods);
+
+                await db.SaveChangesAsync(ct);
+
+                attemptedTimeZoneId = zone.Id;
+                attemptedIsEnabled = command.IsEnabled;
+                attemptedUpdatedAtUtc = now;
+                attemptedPeriods = periods.ToArray();
+                commitAttempted = true;
+
+                await tx.CommitAsync(ct);
+
+                return Result(ProviderCalendarStatus.Success);
+            });
         }
         catch (Exception ex) when (IsExpectedConflict(ex))
         {
-            logger.LogWarning("Concurrent calendar creation rejected for provider {ProviderId}", providerId);
+            db.ChangeTracker.Clear();
+
+            logger.LogWarning(
+                ex,
+                "Concurrent calendar creation rejected for provider {ProviderId}",
+                providerId);
+
             return Result(ProviderCalendarStatus.Conflict);
         }
         finally
         {
-            // Do not leave rolled-back inserts pending in the scoped context.
-            foreach (var period in addedPeriods) db.Entry(period).State = EntityState.Detached;
-            if (addedCalendar != null) db.Entry(addedCalendar).State = EntityState.Detached;
+            foreach (var period in addedPeriods)
+            {
+                if (db.Entry(period).State != EntityState.Detached)
+                    db.Entry(period).State = EntityState.Detached;
+            }
+
+            if (addedCalendar != null
+                && db.Entry(addedCalendar).State != EntityState.Detached)
+            {
+                db.Entry(addedCalendar).State = EntityState.Detached;
+            }
         }
     }
 
     public async Task<ProviderCalendarResult> UpdateAsync(ClaimsPrincipal user,
-        UpdateProviderCalendarCommand command, CancellationToken ct)
+     UpdateProviderCalendarCommand command, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(command);
         var providerId = await ResolveActiveProviderAsync(user, ct);
         if (providerId == null) return Result(ProviderCalendarStatus.Forbidden);
+
         EnsureIndependentWrite();
+
         var submittedPeriods = command.WorkingPeriods?.ToArray();
+        var strategy = db.Database.CreateExecutionStrategy();
         var addedPeriods = new List<ProviderWorkingPeriod>();
+
+        var commitAttempted = false;
+        string? attemptedTimeZoneId = null;
+        var attemptedIsEnabled = false;
+        DateTimeOffset attemptedUpdatedAtUtc = default;
+        CalendarWorkingPeriod[] attemptedPeriods = Array.Empty<CalendarWorkingPeriod>();
+
         try
         {
-            await using var tx = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
-            // Read provider eligibility before locking the calendar, matching creation's resource order.
-            if (await ResolveActiveProviderAsync(user, ct) != providerId)
-                return Result(ProviderCalendarStatus.Forbidden);
-            // Calendar-only operations never acquire MaintenanceRequest row locks.
-            var calendar = await db.ProviderCalendars.FromSqlInterpolated(
-                $"SELECT * FROM [ProviderCalendars] WITH (UPDLOCK, HOLDLOCK) WHERE [ProviderProfileId] = {providerId.Value}")
-                .AsNoTracking().SingleOrDefaultAsync(ct);
-            if (calendar == null) return Result(ProviderCalendarStatus.NotFound);
-
-            var expectedVersion = new byte[8];
-            if (command.ExpectedRowVersion == null
-                || !Convert.TryFromBase64String(command.ExpectedRowVersion, expectedVersion, out var written)
-                || written != expectedVersion.Length)
-                return Error(ProviderCalendarStatus.ValidationFailed, nameof(command.ExpectedRowVersion), "InvalidRowVersion");
-            if (!calendar.RowVersion.AsSpan().SequenceEqual(expectedVersion))
-                return Error(ProviderCalendarStatus.Stale, nameof(command.ExpectedRowVersion), "CalendarChanged");
-
-            var errors = new List<ProviderCalendarError>();
-            var zone = ResolveTimeZone(command.TimeZoneId, errors);
-            var periods = ValidatePeriods(submittedPeriods, command.IsEnabled, errors);
-            if (errors.Count != 0) return new(ProviderCalendarStatus.ValidationFailed, errors.AsReadOnly());
-
-            var active = db.Appointments.AsNoTracking().Where(a => a.ProviderProfileId == providerId
-                && (a.Status == AppointmentStatus.Confirmed || a.Status == AppointmentStatus.InProgress));
-            if (!string.Equals(calendar.TimeZoneId, zone!.Id, StringComparison.Ordinal)
-                && await active.AnyAsync(ct))
-                return Error(ProviderCalendarStatus.Conflict, nameof(command.TimeZoneId), "ActiveAppointmentsPreventTimeZoneChange");
-
-            var existingPeriods = await db.ProviderWorkingPeriods.AsNoTracking()
-                .Where(p => p.ProviderProfileId == providerId)
-                .OrderBy(p => p.DayOfWeek).ThenBy(p => p.StartLocal).ThenBy(p => p.EndLocal)
-                .Select(p => new CalendarWorkingPeriod(p.DayOfWeek, p.StartLocal, p.EndLocal)).ToListAsync(ct);
-            if (!existingPeriods.SequenceEqual(periods))
+            return await strategy.ExecuteAsync(async () =>
             {
-                var now = timeProvider.GetUtcNow();
-                var futureAppointments = await active.Where(a => a.Status == AppointmentStatus.Confirmed && a.StartUtc > now)
-                    .Select(a => new { a.StartUtc, a.EndUtc }).ToListAsync(ct);
-                var definitions = periods.Select(p => new WorkingPeriodDefinition(p.DayOfWeek, p.StartLocal, p.EndLocal)).ToArray();
-                // Disabling booking is allowed, but it does not erase existing commitments.
-                if (futureAppointments.Any(a => !timePolicy.FitsWorkingPeriod(new UtcInterval(a.StartUtc, a.EndUtc), zone, definitions)))
-                    return Error(ProviderCalendarStatus.Conflict, nameof(command.WorkingPeriods), "WorkingPeriodsInvalidateAppointment");
-            }
+                ct.ThrowIfCancellationRequested();
 
-            // Delete first to avoid duplicate unique keys when re-inserting unchanged periods.
-            // Both set-based commands and SaveChanges use this same transaction.
-            await db.ProviderWorkingPeriods.Where(p => p.ProviderProfileId == providerId).ExecuteDeleteAsync(ct);
-            addedPeriods.AddRange(ToEntities(providerId.Value, periods));
-            db.ProviderWorkingPeriods.AddRange(addedPeriods);
-            await db.SaveChangesAsync(ct);
-            var updatedAtUtc = timeProvider.GetUtcNow();
-            var changed = await db.ProviderCalendars.Where(c => c.ProviderProfileId == providerId && c.RowVersion == expectedVersion)
-                .ExecuteUpdateAsync(s => s.SetProperty(c => c.TimeZoneId, zone.Id)
-                    .SetProperty(c => c.IsEnabled, command.IsEnabled)
-                    .SetProperty(c => c.UpdatedAtUtc, updatedAtUtc), ct);
-            if (changed != 1) return Error(ProviderCalendarStatus.Stale, nameof(command.ExpectedRowVersion), "CalendarChanged");
-            await tx.CommitAsync(ct);
-            return Result(ProviderCalendarStatus.Success);
+                db.ChangeTracker.Clear();
+                addedPeriods.Clear();
+
+                if (commitAttempted && attemptedTimeZoneId != null)
+                {
+                    if (await MatchesCommittedStateAsync(
+                            providerId.Value,
+                            attemptedTimeZoneId,
+                            attemptedIsEnabled,
+                            attemptedUpdatedAtUtc,
+                            attemptedPeriods,
+                            ct))
+                    {
+                        return Result(ProviderCalendarStatus.Success);
+                    }
+
+                    commitAttempted = false;
+                }
+
+                await using var tx = await db.Database.BeginTransactionAsync(
+                    IsolationLevel.Serializable, ct);
+
+                // Read provider eligibility before locking the calendar,
+                // matching creation's resource order.
+                if (await ResolveActiveProviderAsync(user, ct) != providerId)
+                    return Result(ProviderCalendarStatus.Forbidden);
+
+                var calendar = await db.ProviderCalendars.FromSqlInterpolated(
+                        $"SELECT * FROM [ProviderCalendars] WITH (UPDLOCK, HOLDLOCK) WHERE [ProviderProfileId] = {providerId.Value}")
+                    .AsNoTracking()
+                    .SingleOrDefaultAsync(ct);
+
+                if (calendar == null)
+                    return Result(ProviderCalendarStatus.NotFound);
+
+                var expectedVersion = new byte[8];
+
+                if (command.ExpectedRowVersion == null
+                    || !Convert.TryFromBase64String(
+                        command.ExpectedRowVersion,
+                        expectedVersion,
+                        out var written)
+                    || written != expectedVersion.Length)
+                {
+                    return Error(
+                        ProviderCalendarStatus.ValidationFailed,
+                        nameof(command.ExpectedRowVersion),
+                        "InvalidRowVersion");
+                }
+
+                if (!calendar.RowVersion.AsSpan().SequenceEqual(expectedVersion))
+                {
+                    return Error(
+                        ProviderCalendarStatus.Stale,
+                        nameof(command.ExpectedRowVersion),
+                        "CalendarChanged");
+                }
+
+                var errors = new List<ProviderCalendarError>();
+                var zone = ResolveTimeZone(command.TimeZoneId, errors);
+                var periods = ValidatePeriods(
+                    submittedPeriods,
+                    command.IsEnabled,
+                    errors);
+
+                if (errors.Count != 0)
+                {
+                    return new(
+                        ProviderCalendarStatus.ValidationFailed,
+                        errors.AsReadOnly());
+                }
+
+                var active = db.Appointments.AsNoTracking()
+                    .Where(a =>
+                        a.ProviderProfileId == providerId.Value
+                        && (a.Status == AppointmentStatus.Confirmed
+                            || a.Status == AppointmentStatus.InProgress));
+
+                if (!string.Equals(
+                        calendar.TimeZoneId,
+                        zone!.Id,
+                        StringComparison.Ordinal)
+                    && await active.AnyAsync(ct))
+                {
+                    return Error(
+                        ProviderCalendarStatus.Conflict,
+                        nameof(command.TimeZoneId),
+                        "ActiveAppointmentsPreventTimeZoneChange");
+                }
+
+                var existingPeriods = await db.ProviderWorkingPeriods.AsNoTracking()
+                    .Where(p => p.ProviderProfileId == providerId.Value)
+                    .OrderBy(p => p.DayOfWeek)
+                    .ThenBy(p => p.StartLocal)
+                    .ThenBy(p => p.EndLocal)
+                    .Select(p => new CalendarWorkingPeriod(
+                        p.DayOfWeek,
+                        p.StartLocal,
+                        p.EndLocal))
+                    .ToListAsync(ct);
+
+                if (!existingPeriods.SequenceEqual(periods))
+                {
+                    var now = timeProvider.GetUtcNow();
+
+                    var futureAppointments = await active
+                        .Where(a =>
+                            a.Status == AppointmentStatus.Confirmed
+                            && a.StartUtc > now)
+                        .Select(a => new
+                        {
+                            a.StartUtc,
+                            a.EndUtc
+                        })
+                        .ToListAsync(ct);
+
+                    var definitions = periods
+                        .Select(p => new WorkingPeriodDefinition(
+                            p.DayOfWeek,
+                            p.StartLocal,
+                            p.EndLocal))
+                        .ToArray();
+
+                    if (futureAppointments.Any(a =>
+                            !timePolicy.FitsWorkingPeriod(
+                                new UtcInterval(a.StartUtc, a.EndUtc),
+                                zone,
+                                definitions)))
+                    {
+                        return Error(
+                            ProviderCalendarStatus.Conflict,
+                            nameof(command.WorkingPeriods),
+                            "WorkingPeriodsInvalidateAppointment");
+                    }
+                }
+
+                await db.ProviderWorkingPeriods
+                    .Where(p => p.ProviderProfileId == providerId.Value)
+                    .ExecuteDeleteAsync(ct);
+
+                addedPeriods.AddRange(
+                    ToEntities(providerId.Value, periods));
+
+                db.ProviderWorkingPeriods.AddRange(addedPeriods);
+
+                await db.SaveChangesAsync(ct);
+
+                var updatedAtUtc = timeProvider.GetUtcNow();
+
+                var changed = await db.ProviderCalendars
+                    .Where(c =>
+                        c.ProviderProfileId == providerId.Value
+                        && c.RowVersion == expectedVersion)
+                    .ExecuteUpdateAsync(s => s
+                        .SetProperty(c => c.TimeZoneId, zone.Id)
+                        .SetProperty(c => c.IsEnabled, command.IsEnabled)
+                        .SetProperty(c => c.UpdatedAtUtc, updatedAtUtc), ct);
+
+                if (changed != 1)
+                {
+                    return Error(
+                        ProviderCalendarStatus.Stale,
+                        nameof(command.ExpectedRowVersion),
+                        "CalendarChanged");
+                }
+
+                attemptedTimeZoneId = zone.Id;
+                attemptedIsEnabled = command.IsEnabled;
+                attemptedUpdatedAtUtc = updatedAtUtc;
+                attemptedPeriods = periods.ToArray();
+                commitAttempted = true;
+
+                await tx.CommitAsync(ct);
+
+                return Result(ProviderCalendarStatus.Success);
+            });
         }
         catch (Exception ex) when (IsExpectedConflict(ex))
         {
-            logger.LogWarning("Concurrent calendar update rejected for provider {ProviderId}", providerId);
+            db.ChangeTracker.Clear();
+
+            logger.LogWarning(
+                ex,
+                "Concurrent calendar update rejected for provider {ProviderId}",
+                providerId);
+
             return Result(ProviderCalendarStatus.Conflict);
         }
         finally
         {
-            foreach (var period in addedPeriods) db.Entry(period).State = EntityState.Detached;
+            foreach (var period in addedPeriods)
+            {
+                if (db.Entry(period).State != EntityState.Detached)
+                    db.Entry(period).State = EntityState.Detached;
+            }
         }
     }
 
@@ -243,7 +476,37 @@ public sealed class ProviderCalendarService(
         {
             ProviderProfileId = providerId, DayOfWeek = p.DayOfWeek, StartLocal = p.StartLocal, EndLocal = p.EndLocal
         });
+    private async Task<bool> MatchesCommittedStateAsync(
+    int providerId,
+    string timeZoneId,
+    bool isEnabled,
+    DateTimeOffset updatedAtUtc,
+    IReadOnlyList<CalendarWorkingPeriod> expectedPeriods,
+    CancellationToken ct)
+    {
+        var calendarMatches = await db.ProviderCalendars.AsNoTracking()
+            .AnyAsync(c =>
+                c.ProviderProfileId == providerId
+                && c.TimeZoneId == timeZoneId
+                && c.IsEnabled == isEnabled
+                && c.UpdatedAtUtc == updatedAtUtc, ct);
 
+        if (!calendarMatches)
+            return false;
+
+        var currentPeriods = await db.ProviderWorkingPeriods.AsNoTracking()
+            .Where(p => p.ProviderProfileId == providerId)
+            .OrderBy(p => p.DayOfWeek)
+            .ThenBy(p => p.StartLocal)
+            .ThenBy(p => p.EndLocal)
+            .Select(p => new CalendarWorkingPeriod(
+                p.DayOfWeek,
+                p.StartLocal,
+                p.EndLocal))
+            .ToListAsync(ct);
+
+        return currentPeriods.SequenceEqual(expectedPeriods);
+    }
     private static bool IsExpectedConflict(Exception ex) => ex is DbUpdateConcurrencyException
         || ex is SqlException { Number: 1205 or 1222 or 2601 or 2627 }
         || ex is DbUpdateException { InnerException: SqlException { Number: 1205 or 1222 or 2601 or 2627 } };

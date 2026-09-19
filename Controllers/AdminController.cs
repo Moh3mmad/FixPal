@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 
 namespace FixPal.Controllers
 {
@@ -80,13 +81,15 @@ namespace FixPal.Controllers
 
             return View(model);
         }
-
         [HttpPost]
-        public async Task<IActionResult> ApproveProvider(int id)
+        public async Task<IActionResult> ApproveProvider(
+            int id,
+            CancellationToken ct)
         {
             var provider = await _context.ProviderProfiles
+                .AsNoTracking()
                 .Include(p => p.User)
-                .FirstOrDefaultAsync(p => p.Id == id);
+                .FirstOrDefaultAsync(p => p.Id == id, ct);
 
             if (provider == null)
             {
@@ -103,43 +106,94 @@ namespace FixPal.Controllers
 
             if (provider.ApprovalStatus != ApprovalStatus.Pending)
             {
-                TempData["ErrorMessage"] = "تمت مراجعة هذا الطلب بالفعل. لا يمكن تغيير القرار من هذا الإجراء.";
+                TempData["ErrorMessage"] =
+                    "تمت مراجعة هذا الطلب بالفعل. لا يمكن تغيير القرار من هذا الإجراء.";
+
                 return RedirectToAction(nameof(Index));
             }
 
-            await using var transaction =
-                await _context.Database.BeginTransactionAsync();
+            var displayName = provider.DisplayName;
+            var strategy = _context.Database.CreateExecutionStrategy();
 
             try
             {
-                if (!await _userManager.IsInRoleAsync(provider.User, AppRoles.Provider))
+                var succeeded = await strategy.ExecuteAsync(async () =>
                 {
-                    var roleResult = await _userManager.AddToRoleAsync(
-                        provider.User,
-                        AppRoles.Provider);
+                    ct.ThrowIfCancellationRequested();
 
-                    if (!roleResult.Succeeded)
+                    _context.ChangeTracker.Clear();
+
+                    await using var transaction =
+                        await _context.Database.BeginTransactionAsync(ct);
+
+                    var current = await _context.ProviderProfiles
+                        .Include(p => p.User)
+                        .FirstOrDefaultAsync(p => p.Id == id, ct);
+
+                    if (current == null || current.User == null)
                     {
-                        var errors = string.Join(", ",
-                            roleResult.Errors.Select(e => e.Description));
-
-                        throw new InvalidOperationException(
-                            $"Failed to assign Provider role. {errors}");
+                        return false;
                     }
+
+                    // If a previous CommitAsync actually succeeded but its
+                    // acknowledgement was lost, this retry is already complete.
+                    if (current.ApprovalStatus == ApprovalStatus.Approved)
+                    {
+                        return true;
+                    }
+
+                    if (current.ApprovalStatus != ApprovalStatus.Pending)
+                    {
+                        return false;
+                    }
+
+                    if (!await _userManager.IsInRoleAsync(
+                            current.User,
+                            AppRoles.Provider))
+                    {
+                        var roleResult =
+                            await _userManager.AddToRoleAsync(
+                                current.User,
+                                AppRoles.Provider);
+
+                        if (!roleResult.Succeeded)
+                        {
+                            var errors = string.Join(
+                                ", ",
+                                roleResult.Errors.Select(
+                                    e => e.Description));
+
+                            throw new InvalidOperationException(
+                                $"Failed to assign Provider role. {errors}");
+                        }
+                    }
+
+                    current.ApprovalStatus =
+                        ApprovalStatus.Approved;
+
+                    await _context.SaveChangesAsync(ct);
+                    await transaction.CommitAsync(ct);
+
+                    return true;
+                });
+
+                if (!succeeded)
+                {
+                    TempData["ErrorMessage"] =
+                        "تمت مراجعة هذا الطلب بالفعل. لا يمكن تغيير القرار من هذا الإجراء.";
+
+                    return RedirectToAction(nameof(Index));
                 }
 
-                provider.ApprovalStatus = ApprovalStatus.Approved;
-                await _context.SaveChangesAsync();
-                await transaction.CommitAsync();
-
                 TempData["SuccessMessage"] =
-                    $"تم اعتماد {provider.DisplayName} كمزود خدمة بنجاح.";
+                    $"تم اعتماد {displayName} كمزود خدمة بنجاح.";
             }
             catch (Exception ex)
             {
-                await transaction.RollbackAsync();
+                _context.ChangeTracker.Clear();
 
-                _logger.LogError(ex,
+                _logger.LogError(
+                    ex,
                     "Failed to approve provider profile {ProviderId}.",
                     id);
 
@@ -149,13 +203,15 @@ namespace FixPal.Controllers
 
             return RedirectToAction(nameof(Index));
         }
-
         [HttpPost]
-        public async Task<IActionResult> RejectProvider(int id)
+        public async Task<IActionResult> RejectProvider(
+            int id,
+            CancellationToken ct)
         {
             var provider = await _context.ProviderProfiles
+                .AsNoTracking()
                 .Include(p => p.User)
-                .FirstOrDefaultAsync(p => p.Id == id);
+                .FirstOrDefaultAsync(p => p.Id == id, ct);
 
             if (provider == null)
             {
@@ -164,44 +220,94 @@ namespace FixPal.Controllers
 
             if (provider.ApprovalStatus != ApprovalStatus.Pending)
             {
-                TempData["ErrorMessage"] = "تمت مراجعة هذا الطلب بالفعل. لا يمكن تغيير القرار من هذا الإجراء.";
+                TempData["ErrorMessage"] =
+                    "تمت مراجعة هذا الطلب بالفعل. لا يمكن تغيير القرار من هذا الإجراء.";
+
                 return RedirectToAction(nameof(Index));
             }
 
-            await using var transaction =
-                await _context.Database.BeginTransactionAsync();
+            var displayName = provider.DisplayName;
+            var strategy = _context.Database.CreateExecutionStrategy();
 
             try
             {
-                if (provider.User != null &&
-                    await _userManager.IsInRoleAsync(provider.User, AppRoles.Provider))
+                var succeeded = await strategy.ExecuteAsync(async () =>
                 {
-                    var roleResult = await _userManager.RemoveFromRoleAsync(
-                        provider.User,
-                        AppRoles.Provider);
+                    ct.ThrowIfCancellationRequested();
 
-                    if (!roleResult.Succeeded)
+                    _context.ChangeTracker.Clear();
+
+                    await using var transaction =
+                        await _context.Database.BeginTransactionAsync(ct);
+
+                    var current = await _context.ProviderProfiles
+                        .Include(p => p.User)
+                        .FirstOrDefaultAsync(p => p.Id == id, ct);
+
+                    if (current == null)
                     {
-                        var errors = string.Join(", ",
-                            roleResult.Errors.Select(e => e.Description));
-
-                        throw new InvalidOperationException(
-                            $"Failed to remove Provider role. {errors}");
+                        return false;
                     }
+
+                    // Covers an uncertain previous commit.
+                    if (current.ApprovalStatus == ApprovalStatus.Rejected)
+                    {
+                        return true;
+                    }
+
+                    if (current.ApprovalStatus != ApprovalStatus.Pending)
+                    {
+                        return false;
+                    }
+
+                    if (current.User != null &&
+                        await _userManager.IsInRoleAsync(
+                            current.User,
+                            AppRoles.Provider))
+                    {
+                        var roleResult =
+                            await _userManager.RemoveFromRoleAsync(
+                                current.User,
+                                AppRoles.Provider);
+
+                        if (!roleResult.Succeeded)
+                        {
+                            var errors = string.Join(
+                                ", ",
+                                roleResult.Errors.Select(
+                                    e => e.Description));
+
+                            throw new InvalidOperationException(
+                                $"Failed to remove Provider role. {errors}");
+                        }
+                    }
+
+                    current.ApprovalStatus =
+                        ApprovalStatus.Rejected;
+
+                    await _context.SaveChangesAsync(ct);
+                    await transaction.CommitAsync(ct);
+
+                    return true;
+                });
+
+                if (!succeeded)
+                {
+                    TempData["ErrorMessage"] =
+                        "تمت مراجعة هذا الطلب بالفعل. لا يمكن تغيير القرار من هذا الإجراء.";
+
+                    return RedirectToAction(nameof(Index));
                 }
 
-                provider.ApprovalStatus = ApprovalStatus.Rejected;
-                await _context.SaveChangesAsync();
-                await transaction.CommitAsync();
-
                 TempData["SuccessMessage"] =
-                    $"تم رفض طلب {provider.DisplayName}.";
+                    $"تم رفض طلب {displayName}.";
             }
             catch (Exception ex)
             {
-                await transaction.RollbackAsync();
+                _context.ChangeTracker.Clear();
 
-                _logger.LogError(ex,
+                _logger.LogError(
+                    ex,
                     "Failed to reject provider profile {ProviderId}.",
                     id);
 

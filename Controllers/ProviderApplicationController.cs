@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 
 namespace FixPal.Controllers
 {
@@ -57,7 +58,9 @@ namespace FixPal.Controllers
         }
 
         [HttpPost]
-        public async Task<IActionResult> Apply(ProviderApplicationViewModel model)
+        public async Task<IActionResult> Apply(
+     ProviderApplicationViewModel model,
+     CancellationToken ct)
         {
             var user = await _userManager.GetUserAsync(User);
 
@@ -68,7 +71,7 @@ namespace FixPal.Controllers
 
             var alreadyApplied = await _context.ProviderProfiles
                 .AsNoTracking()
-                .AnyAsync(p => p.UserId == user.Id);
+                .AnyAsync(p => p.UserId == user.Id, ct);
 
             if (alreadyApplied)
             {
@@ -79,11 +82,11 @@ namespace FixPal.Controllers
             // existence again on the server before creating relationships.
             var categoryExists = await _context.ServiceCategories
                 .AsNoTracking()
-                .AnyAsync(c => c.Id == model.ServiceCategoryId);
+                .AnyAsync(c => c.Id == model.ServiceCategoryId, ct);
 
             var areaExists = await _context.Areas
                 .AsNoTracking()
-                .AnyAsync(a => a.Id == model.AreaId && a.City.IsActive);
+                .AnyAsync(a => a.Id == model.AreaId && a.City.IsActive, ct);
 
             if (!categoryExists)
             {
@@ -99,52 +102,110 @@ namespace FixPal.Controllers
                     "المنطقة المحددة غير موجودة.");
             }
 
-            if (!_phones.TryNormalize(model.PhoneNumber, out var normalized)) ModelState.AddModelError(nameof(model.PhoneNumber), FixPal.Services.AccountPhoneService.ValidationMessage);
+            if (!_phones.TryNormalize(model.PhoneNumber, out var normalized))
+            {
+                ModelState.AddModelError(
+                    nameof(model.PhoneNumber),
+                    FixPal.Services.AccountPhoneService.ValidationMessage);
+            }
+
             if (!ModelState.IsValid)
             {
                 await LoadDropdownsAsync();
                 return View(model);
             }
 
-            await using var transaction =
-                await _context.Database.BeginTransactionAsync();
+            var strategy = _context.Database.CreateExecutionStrategy();
 
             try
             {
-                if (!string.IsNullOrWhiteSpace(model.PhoneNumber))
+                var result = await strategy.ExecuteAsync(async () =>
                 {
-                    var updateUserResult = await _userManager.SetPhoneNumberAsync(user, normalized);
+                    // A retry must not reuse entities tracked by a failed attempt.
+                    _context.ChangeTracker.Clear();
 
-                    if (!updateUserResult.Succeeded)
+                    await using var transaction =
+                        await _context.Database.BeginTransactionAsync(ct);
+
+                    // If a previous CommitAsync succeeded but its acknowledgement
+                    // was lost, treat the existing application as success.
+                    if (await _context.ProviderProfiles
+                        .AsNoTracking()
+                        .AnyAsync(p => p.UserId == user.Id, ct))
                     {
-                        foreach (var error in updateUserResult.Errors)
-                        {
-                            ModelState.AddModelError(string.Empty, error.Description);
-                        }
-
-                        await transaction.RollbackAsync();
-                        await LoadDropdownsAsync();
-                        return View(model);
+                        await transaction.CommitAsync(ct);
+                        return (Succeeded: true, Errors: Array.Empty<string>());
                     }
-                }
 
-                var providerProfile = new ProviderProfile
+                    var attemptUser =
+                        await _userManager.FindByIdAsync(user.Id);
+
+                    if (attemptUser == null)
+                    {
+                        return (
+                            Succeeded: false,
+                            Errors: new[]
+                            {
+                        "تعذر العثور على حساب المستخدم."
+                            });
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(model.PhoneNumber))
+                    {
+                        var updateUserResult =
+                            await _userManager.SetPhoneNumberAsync(
+                                attemptUser,
+                                normalized);
+
+                        if (!updateUserResult.Succeeded)
+                        {
+                            return (
+                                Succeeded: false,
+                                Errors: updateUserResult.Errors
+                                    .Select(e => e.Description)
+                                    .ToArray());
+                        }
+                    }
+
+                    var providerProfile = new ProviderProfile
+                    {
+                        UserId = user.Id,
+                        DisplayName = model.DisplayName.Trim(),
+                        ProviderType = ProviderType.Individual,
+                        ApprovalStatus = ApprovalStatus.Pending,
+                        ServiceCategoryId = model.ServiceCategoryId,
+                        AreaId = model.AreaId,
+                        Description = string.IsNullOrWhiteSpace(model.Description)
+                            ? null
+                            : model.Description.Trim(),
+                        CreatedAt = DateTime.UtcNow
+                    };
+
+                    await _context.ProviderProfiles.AddAsync(
+                        providerProfile,
+                        ct);
+
+                    await _context.SaveChangesAsync(ct);
+
+                    await transaction.CommitAsync(ct);
+
+                    return (
+                        Succeeded: true,
+                        Errors: Array.Empty<string>());
+                });
+
+                if (!result.Succeeded)
                 {
-                    UserId = user.Id,
-                    DisplayName = model.DisplayName.Trim(),
-                    ProviderType = ProviderType.Individual,
-                    ApprovalStatus = ApprovalStatus.Pending,
-                    ServiceCategoryId = model.ServiceCategoryId,
-                    AreaId = model.AreaId,
-                    Description = string.IsNullOrWhiteSpace(model.Description)
-                        ? null
-                        : model.Description.Trim(),
-                    CreatedAt = DateTime.UtcNow
-                };
+                    foreach (var error in result.Errors)
+                    {
+                        ModelState.AddModelError(
+                            string.Empty,
+                            error);
+                    }
 
-                await _context.ProviderProfiles.AddAsync(providerProfile);
-                await _context.SaveChangesAsync();
-                await transaction.CommitAsync();
+                    await LoadDropdownsAsync();
+                    return View(model);
+                }
 
                 TempData["SuccessMessage"] =
                     "تم إرسال طلب الانضمام بنجاح. سنعرض لك حالة المراجعة هنا.";
@@ -153,9 +214,10 @@ namespace FixPal.Controllers
             }
             catch (DbUpdateException ex)
             {
-                await transaction.RollbackAsync();
+                _context.ChangeTracker.Clear();
 
-                _logger.LogError(ex,
+                _logger.LogError(
+                    ex,
                     "Database error while creating provider profile for user {UserId}.",
                     user.Id);
 
@@ -165,9 +227,10 @@ namespace FixPal.Controllers
             }
             catch (Exception ex)
             {
-                await transaction.RollbackAsync();
+                _context.ChangeTracker.Clear();
 
-                _logger.LogError(ex,
+                _logger.LogError(
+                    ex,
                     "Unexpected error while creating provider profile for user {UserId}.",
                     user.Id);
 
