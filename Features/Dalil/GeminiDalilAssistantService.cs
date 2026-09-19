@@ -22,7 +22,7 @@ public sealed class GeminiDalilAssistantService(
         ArgumentNullException.ThrowIfNull(request);
         if (!IsBounded(request)) return DalilAssistantResult.Unavailable();
         var settings = options.Value;
-        if (string.IsNullOrWhiteSpace(settings.GeminiApiKey)
+        if (string.IsNullOrWhiteSpace(settings.EffectiveApiKey)
             || string.IsNullOrWhiteSpace(settings.Model)
             || !TryEndpoint(settings, out var endpoint))
             return DalilAssistantResult.Unavailable();
@@ -92,7 +92,7 @@ public sealed class GeminiDalilAssistantService(
         DalilAssistantRequest request)
     {
         var message = new HttpRequestMessage(HttpMethod.Post, endpoint);
-        message.Headers.Add("x-goog-api-key", settings.GeminiApiKey);
+        message.Headers.Add("x-goog-api-key", settings.EffectiveApiKey);
         message.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
         message.Content = JsonContent.Create(BuildProviderRequest(request, settings));
         return message;

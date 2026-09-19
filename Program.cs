@@ -6,6 +6,8 @@ using Microsoft.EntityFrameworkCore;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.RateLimiting;
 using FixPal.Features.Dalil;
+using Azure.Identity;
+using Azure.Storage.Blobs;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
@@ -23,8 +25,26 @@ builder.Services.AddScoped<FixPal.Services.RequestWorkflowService>();
 builder.Services.AddScoped<FixPal.Services.RequestDetailsService>();
 builder.Services.AddScoped<FixPal.Services.RequestCommerceService>();
 builder.Services.AddScoped<FixPal.Services.ProviderMatchingService>();
-builder.Services.AddScoped<FixPal.Services.IPrivateMediaStorage, FixPal.Services.LocalPrivateMediaStorage>();
-builder.Services.AddScoped<FixPal.Services.IPortfolioMediaStorage, FixPal.Services.PortfolioMediaStorage>();
+if (builder.Environment.IsProduction())
+{
+    builder.Services.AddOptions<FixPal.Services.BlobStorageOptions>()
+        .Bind(builder.Configuration.GetSection(FixPal.Services.BlobStorageOptions.SectionName))
+        .Validate(options => options.TryGetBlobServiceUri(out _),
+            "Storage:BlobServiceUri must be an absolute HTTPS Azure Blob service URI.")
+        .ValidateOnStart();
+    builder.Services.AddSingleton(sp =>
+    {
+        var options = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<FixPal.Services.BlobStorageOptions>>().Value;
+        return new BlobServiceClient(options.GetBlobServiceUri(), new DefaultAzureCredential());
+    });
+    builder.Services.AddScoped<FixPal.Services.IPrivateMediaStorage, FixPal.Services.AzureBlobPrivateMediaStorage>();
+    builder.Services.AddScoped<FixPal.Services.IPortfolioMediaStorage, FixPal.Services.AzureBlobPortfolioMediaStorage>();
+}
+else
+{
+    builder.Services.AddScoped<FixPal.Services.IPrivateMediaStorage, FixPal.Services.LocalPrivateMediaStorage>();
+    builder.Services.AddScoped<FixPal.Services.IPortfolioMediaStorage, FixPal.Services.PortfolioMediaStorage>();
+}
 
 builder.Services.Configure<FixPal.Services.DiagnosisOptions>(builder.Configuration.GetSection("Diagnosis"));
 builder.Services.AddHttpClient<FixPal.Services.IProblemDiagnosisService, FixPal.Services.OpenAiProblemDiagnosisService>().ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
@@ -35,7 +55,7 @@ var connectionString =
         "Connection string 'DefaultConnection' not found.");
 
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseSqlServer(connectionString));
+    options.UseSqlServer(connectionString, sql => sql.EnableRetryOnFailure()));
 
 builder.Services.AddDatabaseDeveloperPageExceptionFilter();
 builder.Services.AddRateLimiter(options =>
