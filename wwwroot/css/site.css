@@ -46,6 +46,9 @@ bdi { overflow-wrap: anywhere; }
 .fp-brand-wordmark { font-size: 1.6rem; font-weight: 800; }
 .fp-nav-link { font-weight: 600; font-size: .87rem; padding: .55rem .7rem !important; border-bottom: 2px solid transparent; }
 .fp-nav-link:hover, .fp-nav-link[aria-current="page"] { color: var(--fp-navy) !important; border-bottom-color: var(--fp-orange); }
+.fp-dalil-launcher { display: inline-flex; align-items: center; justify-content: center; gap: .4rem; white-space: nowrap; color: var(--fp-navy); background: var(--fp-surface); border: 1px solid var(--fp-orange); }
+.fp-dalil-launcher:hover, .fp-dalil-launcher:focus-visible { color: var(--fp-navy); background: #fff6e8; border-color: var(--fp-orange); }
+.fp-dalil-launcher .bi { color: var(--fp-orange); font-size: 1.1rem; line-height: 1; }
 .fp-navbar-toggler { border: 1px solid var(--fp-border); border-radius: var(--fp-radius-sm); padding: .5rem; }
 .fp-navbar.is-scrolled { box-shadow: var(--fp-shadow-sm); }
 .btn { min-height: 44px; border-radius: var(--fp-radius-sm); font-weight: 700; font-size: .9rem; padding: .65rem 1.1rem; line-height: 1.7; }
@@ -95,6 +98,7 @@ details > summary + * { margin-top: 1rem; }
 @media (max-width: 1199.98px) {
     .fp-navbar .navbar-collapse { margin-top: .8rem; padding-block: .8rem; border-top: 1px solid var(--fp-border); max-height: calc(100dvh - 95px); overflow-y: auto; }
     .fp-nav-link { padding-block: .75rem !important; }
+    .fp-dalil-launcher { width: 100%; }
     .fp-account-button { width: 100%; max-width: none; justify-content: space-between; }
     .fp-account-menu { width: 100%; }
 }

@@ -4,7 +4,7 @@
     <a asp-area="" asp-action="Index" class="fp-text-link">العودة إلى دليل المزودين</a>
     <section class="fp-public-profile">
         <div>
-            <span class="fp-approved">ملف راجعته إدارة صلّحلي</span>
+            <span class="fp-approved">ملف راجعته إدارة تصليحة</span>
             <h1>@Model.DisplayName</h1>
             <partial name="_Availability" model="Model" />
             <p class="fp-profile-specialty">@Model.Category <span class="fp-separator">/</span> @Model.Location</p>
@@ -22,7 +22,7 @@
             else
             {
                 <h2>ملف جهة مؤسسية</h2>
-                <p>التوجيه المباشر للجهات المؤسسية غير متاح بعد. يمكنك تسجيل بلاغ داخل صلّحلي بدون تعيين جهة.</p>
+                <p>التوجيه المباشر للجهات المؤسسية غير متاح بعد. يمكنك تسجيل بلاغ داخل تصليحة بدون تعيين جهة.</p>
                 <a asp-area="" asp-controller="MaintenanceRequests" asp-action="Create" asp-route-requestType="PublicReport" class="btn fp-btn-gold">تسجيل بلاغ</a>
             }
         </aside>

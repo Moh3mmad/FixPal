@@ -8,8 +8,8 @@
 <header class="fp-header">
     <nav class="navbar navbar-light navbar-expand-xl fp-navbar" aria-label="التنقل الرئيسي">
         <div class="container">
-            <a class="navbar-brand fp-brand" asp-area="" asp-controller="Home" asp-action="Index" aria-label="صلّحلي — الرئيسية">
-                <span class="fp-brand-mark" aria-hidden="true"><i class="bi bi-tools"></i></span><span class="fp-brand-wordmark">صلّحلي</span>
+            <a class="navbar-brand fp-brand" asp-area="" asp-controller="Home" asp-action="Index" aria-label="تصليحة — الرئيسية">
+                <span class="fp-brand-mark" aria-hidden="true"><i class="bi bi-tools"></i></span><span class="fp-brand-wordmark">تصليحة</span>
             </a>
             <button class="navbar-toggler fp-navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#fixpalNavbar" aria-controls="fixpalNavbar" aria-expanded="false" aria-label="فتح أو إغلاق القائمة"><span class="navbar-toggler-icon"></span></button>
             <div class="collapse navbar-collapse" id="fixpalNavbar">
@@ -21,7 +21,6 @@
                     {
                         <li class="nav-item"><a class="nav-link fp-nav-link" aria-current="@Current("ProviderRequests")" asp-area="" asp-controller="ProviderRequests" asp-action="Index">طلبات العمل</a></li>
                         <li class="nav-item"><a class="nav-link fp-nav-link" aria-current="@Current("ProviderCalendar")" asp-area="" asp-controller="ProviderCalendar" asp-action="Index">تقويم العمل</a></li>
-                        <li class="nav-item"><a class="nav-link fp-nav-link" aria-current="@Current("ProviderAvailability")" asp-area="" asp-controller="ProviderAvailability" asp-action="Index">التوفر</a></li>
                     }
                     else if (signedIn)
                     {
@@ -30,15 +29,14 @@
                     }
                     else
                     {
-                        <li class="nav-item"><a class="nav-link fp-nav-link" asp-area="" asp-controller="Home" asp-action="Index" asp-fragment="how-it-works">كيف يعمل صلّحلي؟</a></li>
+                        <li class="nav-item"><a class="nav-link fp-nav-link" asp-area="" asp-controller="Home" asp-action="Index" asp-fragment="how-it-works">كيف يعمل تصليحة؟</a></li>
                     }
                 </ul>
-                <button type="button"
-        class="btn btn-outline-primary d-inline-flex align-items-center justify-content-center me-xl-2 mb-3 mb-xl-0"
-            onclick="window.DalilAssistant?.open()"
-                        aria-label="فتح مساعد دليل"
-                     title="دليل">
-                    <i class="bi bi-chat-dots" aria-hidden="true"></i>
+                <button type="button" class="btn fp-dalil-launcher me-xl-2 mb-3 mb-xl-0"
+                        onclick="window.DalilAssistant?.open()"
+                        aria-label="فتح مساعد دليل" title="دليل — مساعد ذكي">
+                    <i class="bi bi-stars" aria-hidden="true"></i>
+                    <span>دليل <span class="fp-dalil-launcher-detail">· مساعد ذكي</span></span>
                 </button>
                 <partial name="_LoginPartial" />
             </div>

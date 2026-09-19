@@ -33,6 +33,49 @@
     }
     else
     {
+        var canChooseTime = Model.IsOwner && Model.CalendarPreview != null && Model.CalendarEnabled == true
+            && Model.PendingProposals.Count == 0
+            && (Model.ConfirmedAppointment == null || Model.ConfirmedAppointment.Status == AppointmentStatus.Confirmed);
+        @if (canChooseTime)
+        {
+            <section class="fp-customer-calendar" aria-labelledby="customer-calendar-heading"
+                     data-calendar-start="@(Model.ConfirmedAppointment == null ? "appointment-start" : "appointment-reschedule-start")"
+                     data-calendar-end="@(Model.ConfirmedAppointment == null ? "appointment-end" : "appointment-reschedule-end")">
+                <h3 id="customer-calendar-heading">أوقات عمل مزود الخدمة خلال الأسبوع</h3>
+                <p class="fp-field-hint">الأوقات حسب <bdi>@SchedulingDisplay.ZoneLabel(Model.CalendarTimeZoneId)</bdi>. «مشغول» يعني أن الوقت غير متاح فقط؛ تفاصيل الطلبات الأخرى لا تُعرض. اختر وقتًا متاحًا لملء النموذج، ثم راجعه قبل إرسال الاقتراح.</p>
+                <div class="fp-customer-calendar-days">
+                    @foreach (var day in Model.CalendarPreview!.Days)
+                    {
+                        <div class="fp-customer-calendar-day">
+                            <h4>@day.Date.ToDateTime(TimeOnly.MinValue).ToString("dddd d MMM", new System.Globalization.CultureInfo("ar-PS"))</h4>
+                            @if (day.Slots.Count == 0)
+                            {
+                                <p class="fp-field-hint mb-0">لا توجد أوقات عمل متاحة</p>
+                            }
+                            else
+                            {
+                                <div class="fp-customer-calendar-slots">
+                                    @foreach (var slot in day.Slots)
+                                    {
+                                        <button class="fp-customer-calendar-slot @(slot.IsAvailable ? "" : "is-busy")" type="button"
+                                                disabled="@(!slot.IsAvailable)"
+                                                data-calendar-slot
+                                                aria-pressed="false"
+                                                data-start="@slot.StartLocal.ToString("yyyy-MM-ddTHH:mm", System.Globalization.CultureInfo.InvariantCulture)"
+                                                data-end="@slot.EndLocal.ToString("yyyy-MM-ddTHH:mm", System.Globalization.CultureInfo.InvariantCulture)"
+                                                aria-label="@slot.StartLocal.ToString("HH:mm") إلى @slot.EndLocal.ToString("HH:mm")، @(slot.IsAvailable ? "متاح" : "مشغول")">
+                                            <span dir="ltr">@slot.StartLocal.ToString("HH:mm")–@slot.EndLocal.ToString("HH:mm")</span>
+                                            <small>@(slot.IsAvailable ? "متاح" : "مشغول")</small>
+                                        </button>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+                <p class="fp-field-hint mb-0 mt-2">الأوقات المعروضة إرشادية وقد تتغير. يتحقق النظام من التوفر مجددًا عند تأكيد الطرف الآخر للموعد.</p>
+            </section>
+        }
         @if (Model.ConfirmedAppointment is { } confirmed)
         {
             <div class="fp-appointment-current">
@@ -182,3 +225,4 @@
         </details>
     }
 </section>
+<script src="~/js/appointment-calendar-preview.js" asp-append-version="true" defer></script>

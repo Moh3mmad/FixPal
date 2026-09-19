@@ -38,7 +38,7 @@
             section.className = 'dalil-assistant__providers';
             const title = document.createElement('strong');
             title.className = 'dalil-assistant__providers-title';
-            title.textContent = 'مزودون مطابقون من صلّحلي';
+            title.textContent = 'مزودون مطابقون من تصليحة';
             section.append(title);
 
             if (providers[0]?.matchScope === 'SameCity') {

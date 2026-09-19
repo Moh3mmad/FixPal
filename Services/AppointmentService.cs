@@ -35,6 +35,7 @@ public sealed class AppointmentService(
         string? calendarTimeZoneId = null;
         bool? calendarEnabled = null;
         var appointments = new List<Appointment>();
+        CustomerCalendarPreview? calendarPreview = null;
 
         if (request.ProviderProfileId is int providerId)
         {
@@ -44,6 +45,10 @@ public sealed class AppointmentService(
                 .SingleOrDefaultAsync(ct);
             calendarTimeZoneId = calendar?.TimeZoneId;
             calendarEnabled = calendar?.IsEnabled;
+            if (grant.IsOwner && request.RequestType == RequestType.PrivateService
+                && request.Status == MaintenanceRequestStatus.Accepted && hasAgreement
+                && calendar is { IsEnabled: true })
+                calendarPreview = await ReadCustomerCalendarPreviewAsync(providerId, calendar.TimeZoneId, ct);
             appointments = await db.Appointments.AsNoTracking()
                 .Where(a => a.MaintenanceRequestId == request.Id && a.ProviderProfileId == providerId)
                 .OrderBy(a => a.CreatedAtUtc).ThenBy(a => a.Id)
@@ -76,7 +81,62 @@ public sealed class AppointmentService(
             calendarEnabled,
             confirmed.Count == 1 ? ToReadModel(confirmed[0], actorId, request.Status) : null,
             proposals,
-            history);
+            history,
+            calendarPreview);
+    }
+
+    private async Task<CustomerCalendarPreview?> ReadCustomerCalendarPreviewAsync(
+        int providerId, string timeZoneId, CancellationToken ct)
+    {
+        TimeZoneInfo zone;
+        try { zone = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId); }
+        catch (TimeZoneNotFoundException) { return null; }
+        catch (InvalidTimeZoneException) { return null; }
+
+        var now = clock.GetUtcNow();
+        var horizon = now.AddDays(9);
+        var periods = await db.ProviderWorkingPeriods.AsNoTracking()
+            .Where(p => p.ProviderProfileId == providerId)
+            .OrderBy(p => p.DayOfWeek).ThenBy(p => p.StartLocal)
+            .Select(p => new { p.DayOfWeek, p.StartLocal, p.EndLocal }).ToListAsync(ct);
+        var blackouts = await db.ProviderBlackouts.AsNoTracking()
+            .Where(b => b.ProviderProfileId == providerId && b.RemovedAtUtc == null
+                && b.StartUtc < horizon && b.EndUtc > now)
+            .Select(b => new { b.StartUtc, b.EndUtc }).ToListAsync(ct);
+        var occupied = await db.Appointments.AsNoTracking()
+            .Where(a => a.ProviderProfileId == providerId && a.StartUtc < horizon
+                && ((a.Status == AppointmentStatus.Confirmed && a.EndUtc > now)
+                    || a.Status == AppointmentStatus.InProgress))
+            .Select(a => new { a.StartUtc, a.EndUtc, a.Status }).ToListAsync(ct);
+
+        var firstDate = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(now, zone).DateTime);
+        var days = new List<CustomerCalendarDay>(7);
+        for (var offset = 0; offset < 7; offset++)
+        {
+            var date = firstDate.AddDays(offset);
+            var slots = new List<CustomerCalendarSlot>();
+            foreach (var period in periods.Where(p => p.DayOfWeek == date.DayOfWeek))
+            {
+                var minutes = (int)(period.EndLocal - period.StartLocal).TotalMinutes;
+                if (minutes <= 0) continue;
+                var slotMinutes = Math.Min(60, minutes);
+                var stepMinutes = slotMinutes;
+                var start = date.ToDateTime(period.StartLocal);
+                var lastEnd = date.ToDateTime(period.EndLocal);
+                for (; start.AddMinutes(slotMinutes) <= lastEnd; start = start.AddMinutes(stepMinutes))
+                {
+                    var end = start.AddMinutes(slotMinutes);
+                    var resolved = timePolicy.ResolveLocalInterval(start, end, zone);
+                    if (resolved.Interval is not { } interval || !timePolicy.IsFutureStart(interval.StartUtc)) continue;
+                    var blocked = blackouts.Any(b => b.StartUtc < interval.EndUtc && interval.StartUtc < b.EndUtc)
+                        || occupied.Any(a => a.StartUtc < interval.EndUtc
+                            && (a.Status == AppointmentStatus.InProgress || interval.StartUtc < a.EndUtc));
+                    slots.Add(new CustomerCalendarSlot(start, end, !blocked));
+                }
+            }
+            days.Add(new CustomerCalendarDay(date, slots.AsReadOnly()));
+        }
+        return new CustomerCalendarPreview(days.AsReadOnly());
     }
 
     public Task<AppointmentResult> ScheduleAsync(

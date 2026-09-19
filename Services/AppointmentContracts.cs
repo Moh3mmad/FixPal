@@ -37,6 +37,11 @@ public sealed record AppointmentReadModel(
     bool CanWithdraw,
     bool CanCancel);
 
+// Public scheduling hints only: no other request or customer metadata is included.
+public sealed record CustomerCalendarSlot(DateTime StartLocal, DateTime EndLocal, bool IsAvailable);
+public sealed record CustomerCalendarDay(DateOnly Date, IReadOnlyList<CustomerCalendarSlot> Slots);
+public sealed record CustomerCalendarPreview(IReadOnlyList<CustomerCalendarDay> Days);
+
 public sealed record AppointmentPanelReadModel(
     int MaintenanceRequestId,
     MaintenanceRequestStatus RequestStatus,
@@ -48,7 +53,8 @@ public sealed record AppointmentPanelReadModel(
     bool? CalendarEnabled,
     AppointmentReadModel? ConfirmedAppointment,
     IReadOnlyList<AppointmentReadModel> PendingProposals,
-    IReadOnlyList<AppointmentReadModel> History);
+    IReadOnlyList<AppointmentReadModel> History,
+    CustomerCalendarPreview? CalendarPreview);
 
 public enum AppointmentResultStatus
 {

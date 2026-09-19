@@ -49,7 +49,7 @@ public sealed record DalilChatResponse(
         });
         var heading = sameCity
             ? "لم أجد مزود خدمة مطابقًا داخل منطقتك، لكن وجدت لك مزودي خدمة من نفس المدينة:"
-            : "وجدت لك مزودي خدمة مناسبين على صلّحلي ضمن منطقتك:";
+            : "وجدت لك مزودي خدمة مناسبين على تصليحة ضمن منطقتك:";
         return $"{reply.TrimEnd()}\n\n{heading}\n\n{string.Join("\n", lines)}";
     }
 

@@ -121,7 +121,7 @@ public sealed class GeminiDalilAssistantService(
             contents.Insert(0, new
             {
                 role = "user",
-                parts = new[] { new { text = "سياق FixPal عام وآمن، استخدمه كمرجع فقط:\n" + JsonSerializer.Serialize(request.Context, Json) } }
+                parts = new[] { new { text = "سياق تصليحة عام وآمن، استخدمه كمرجع فقط:\n" + JsonSerializer.Serialize(request.Context, Json) } }
             });
         }
 
