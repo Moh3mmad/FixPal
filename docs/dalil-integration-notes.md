@@ -40,7 +40,7 @@ Supported configuration keys:
 
 | Key | Purpose | Default |
 | --- | --- | --- |
-| `Dalil:GeminiApiKey` | Server-side Gemini credential | none |
+| `Dalil:ApiKey` | Server-side Gemini credential | none |
 | `Dalil:Model` | Gemini model name | `gemini-3.5-flash-lite` |
 | `Dalil:Endpoint` | Gemini REST base URL | `https://generativelanguage.googleapis.com/v1beta/` |
 | `Dalil:TimeoutSeconds` | Per-request timeout | `20` |
@@ -50,13 +50,13 @@ Supported configuration keys:
 Store a development credential with user secrets:
 
 ```powershell
-dotnet user-secrets set "Dalil:GeminiApiKey" "<your-key>"
+dotnet user-secrets set "Dalil:ApiKey" "<your-key>"
 ```
 
 The environment-variable equivalent is:
 
 ```text
-Dalil__GeminiApiKey=<your-key>
+Dalil__ApiKey=<your-key>
 ```
 
 Never add a real credential to `appsettings.json`, Razor, JavaScript, logs, source control, or a URL. The provider sends it from the server in the `x-goog-api-key` request header, following the [official Gemini authentication guidance](https://ai.google.dev/gemini-api/docs/api-key).
@@ -65,7 +65,7 @@ Never add a real credential to `appsettings.json`, Razor, JavaScript, logs, sour
 
 After the owner approves the shared-file changes:
 
-1. Set `Dalil:GeminiApiKey` through user secrets or the environment.
+1. Set `Dalil:ApiKey` through user secrets or the environment.
 2. Optionally set `Dalil:Model` to an enabled Gemini model.
 3. Add the DI call and render the partial as described above.
 4. Start the application and sign in.
