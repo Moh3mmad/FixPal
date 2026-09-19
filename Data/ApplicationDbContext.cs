@@ -21,6 +21,7 @@ namespace FixPal.Data
         public DbSet<QuoteDecision> QuoteDecisions { get; set; }
         public DbSet<RequestMessage> RequestMessages { get; set; }
         public DbSet<RequestEvidence> RequestEvidence { get; set; }
+        public DbSet<ProviderPortfolioItem> ProviderPortfolioItems { get; set; }
         public DbSet<ProviderReview> ProviderReviews { get; set; }
         public DbSet<ServiceCategory> ServiceCategories { get; set; }
         public DbSet<ProviderProfile> ProviderProfiles { get; set; }
@@ -153,6 +154,9 @@ namespace FixPal.Data
             review.HasOne(r => r.ProviderProfile).WithMany(p => p.Reviews).HasForeignKey(r => r.ProviderProfileId).OnDelete(DeleteBehavior.Restrict);
             review.HasOne(r => r.Customer).WithMany().HasForeignKey(r => r.CustomerId).OnDelete(DeleteBehavior.Restrict);
             review.ToTable(t => t.HasCheckConstraint("CK_ProviderReviews_Rating", "[Rating] BETWEEN 1 AND 5"));
+            var portfolio = builder.Entity<ProviderPortfolioItem>();
+            portfolio.HasOne(p => p.ProviderProfile).WithMany().HasForeignKey(p => p.ProviderProfileId).OnDelete(DeleteBehavior.Restrict);
+            portfolio.HasIndex(p => new { p.ProviderProfileId, p.IsArchived, p.CreatedAtUtc, p.Id });
             var evidence = builder.Entity<RequestEvidence>();
             evidence.HasOne(e => e.MaintenanceRequest).WithMany().HasForeignKey(e => e.MaintenanceRequestId).OnDelete(DeleteBehavior.Restrict);
             evidence.HasOne(e => e.UploadedBy).WithMany().HasForeignKey(e => e.UploadedById).OnDelete(DeleteBehavior.Restrict);

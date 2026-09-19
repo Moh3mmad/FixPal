@@ -3,6 +3,8 @@ using Microsoft.AspNetCore.Mvc.Rendering;
 namespace FixPal.Models.ViewModels;
 public class PublicProviderViewModel
 {
+    public PagedResult<PortfolioItemViewModel> Portfolio { get; set; } = new();
+    public int CompletedServiceCount { get; set; }
     public int Id { get; set; }
     public string DisplayName { get; set; } = string.Empty;
     public string Category { get; set; } = string.Empty;

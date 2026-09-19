@@ -1,7 +1,39 @@
 @model FixPal.Models.ViewModels.EvidenceViewModel
-@{ ViewData["Title"] = "توثيق قبل وبعد"; }
-<div class="container fp-workspace"><a asp-area="" asp-controller="MaintenanceRequests" asp-action="Details" asp-route-id="@Model.RequestId" class="fp-text-link">تفاصيل الطلب</a><div class="fp-page-heading mt-4"><div><span class="fp-eyebrow">طلب #@Model.RequestId · صور خاصة</span><h1>الفرق يظهر في التفاصيل.</h1><p>وثّق المشكلة قبل العمل، والنتيجة بعده. لا تظهر هذه الصور في الملفات العامة.</p></div></div><partial name="_Flash" />
-@if (Model.CanUpload) { <form asp-action="Upload" asp-route-id="@Model.RequestId" method="post" enctype="multipart/form-data" class="fp-detail-panel mb-4"><div class="row g-3"><div class="col-md-4"><label for="kind" class="form-label">مرحلة التوثيق</label><select id="kind" name="kind" class="form-select"><option value="1">قبل العمل</option><option value="2">بعد العمل</option></select></div><div class="col-md-8"><label for="file" class="form-label">الصورة (PNG / JPEG، حتى 5MB)</label><input id="file" name="file" type="file" accept="image/png,image/jpeg" required class="form-control" /></div></div><p class="fp-field-hint">حتى 20 صورة لكل طلب. تجنّب تصوير الوجوه والمستندات وبيانات الآخرين.</p><button class="btn fp-btn-gold" type="submit">إضافة صورة</button></form> }
-@if (Model.Evidence.Items.Count == 0) { <div class="fp-empty"><h2>لم تُضف صور بعد.</h2><p>صورة واضحة تساعد على توثيق حالة المشكلة.</p></div> }
-<div class="fp-provider-grid">@foreach(var item in Model.Evidence.Items) { <article class="fp-provider-card"><strong>@(item.Kind == EvidenceKind.Before ? "قبل العمل" : "بعد العمل")</strong><a asp-action="Image" asp-route-id="@item.Id" target="_blank" rel="noopener"><img src="@Url.Action("Image", new { id = item.Id })" alt="@(item.Kind == EvidenceKind.Before ? "توثيق قبل العمل" : "توثيق بعد العمل")" loading="lazy" style="width:100%;height:220px;object-fit:contain;margin-block:1rem" /></a><time data-utc="@item.CreatedAtUtc.ToString("yyyy-MM-ddTHH:mm:ssZ")">@item.CreatedAtUtc.ToString("u")</time></article> }</div>
-<nav class="fp-pagination">@if(Model.Evidence.Page>1) { <a asp-action="Index" asp-route-id="@Model.RequestId" asp-route-page="@(Model.Evidence.Page-1)">السابق</a> }<span>@Model.Evidence.Page / @Model.Evidence.TotalPages</span>@if(Model.Evidence.Page<Model.Evidence.TotalPages) { <a asp-action="Index" asp-route-id="@Model.RequestId" asp-route-page="@(Model.Evidence.Page+1)">التالي</a> }</nav></div>
+@{ ViewData["Title"] = "صور العمل"; }
+<div class="container fp-workspace">
+    <a asp-controller="MaintenanceRequests" asp-action="Details" asp-route-id="@Model.RequestId" class="fp-text-link">تفاصيل الطلب</a>
+    <div class="fp-page-heading mt-4"><div><span class="fp-eyebrow">طلب #@Model.RequestId · صور خاصة</span><h1>🖼 صور العمل</h1><p>قبل العمل من العميل، وبعد العمل من المزود المعيّن. الصور اختيارية ولا تظهر في الملفات العامة.</p></div></div>
+    <partial name="_Flash" />
+    @if (Model.UploadKind.HasValue)
+    {
+        <form asp-action="Upload" asp-route-id="@Model.RequestId" method="post" enctype="multipart/form-data" class="fp-detail-panel mb-4">
+            <h2>@(Model.UploadKind == EvidenceKind.Before ? "قبل العمل — من العميل" : "بعد العمل — من مزود الخدمة")</h2>
+            <input type="hidden" name="kind" value="@((int)Model.UploadKind.Value)" />
+            <label for="file" class="form-label">الصورة (PNG / JPEG، حتى 5MB)</label>
+            <input id="file" name="file" type="file" accept="image/png,image/jpeg" required class="form-control" />
+            <p class="fp-field-hint">حتى 20 صورة لكل طلب. تجنّب تصوير الوجوه والمستندات وبيانات الآخرين. رفع الصور اختياري.</p>
+            <button class="btn fp-btn-gold" type="submit">إضافة صورة</button>
+        </form>
+    }
+    else { <p class="fp-notice">رفع صور قبل العمل متاح لصاحب الطلب قبل بدء التنفيذ، وصور بعد العمل للمزود المعيّن أثناء التنفيذ وقبل الإكمال. يمكنك مراجعة الصور المحفوظة.</p> }
+    @foreach (var kind in new[] { EvidenceKind.Before, EvidenceKind.After, EvidenceKind.General })
+    {
+        var items = Model.Evidence.Items.Where(e => e.DisplayKind == kind).ToList();
+        <section class="fp-detail-panel mb-4">
+            <h2>@(kind == EvidenceKind.Before ? "قبل العمل" : kind == EvidenceKind.After ? "بعد العمل" : "صور عامة / سابقة")</h2>
+            <p>@(kind == EvidenceKind.Before ? "من العميل" : kind == EvidenceKind.After ? "من مزود الخدمة" : "محفوظة كما رُفعت سابقًا؛ لا يمكن تأكيد مرحلتها أو دور رافعها وقت الرفع.")</p>
+            @if (items.Count == 0) { <p class="fp-field-hint">@(Model.Evidence.TotalPages > 1 ? "لا توجد صور لهذه الفئة في هذه الصفحة." : "لم تُضف صور لهذه الفئة.")</p> }
+            <div class="fp-provider-grid">
+            @foreach (var item in items)
+            {
+                <article class="fp-provider-card">
+                    <a asp-action="Image" asp-route-id="@item.Id" target="_blank" rel="noopener"><img src="@Url.Action("Image", new { id = item.Id })" alt="صورة خاصة بالطلب" loading="lazy" style="width:100%;height:220px;object-fit:contain;margin-block:1rem" /></a>
+                    <p>@(kind == EvidenceKind.Before ? "رفعها العميل" : kind == EvidenceKind.After ? "رفعها مزود الخدمة" : "صورة سابقة — التصنيف غير مؤكد")</p>
+                    <time data-utc="@item.CreatedAtUtc.ToString("yyyy-MM-ddTHH:mm:ssZ")">@item.CreatedAtUtc.ToString("u")</time>
+                </article>
+            }
+            </div>
+        </section>
+    }
+    <nav class="fp-pagination">@if (Model.Evidence.Page > 1) { <a asp-action="Index" asp-route-id="@Model.RequestId" asp-route-page="@(Model.Evidence.Page - 1)">السابق</a> }<span>@Model.Evidence.Page / @Model.Evidence.TotalPages</span>@if (Model.Evidence.Page < Model.Evidence.TotalPages) { <a asp-action="Index" asp-route-id="@Model.RequestId" asp-route-page="@(Model.Evidence.Page + 1)">التالي</a> }</nav>
+</div>

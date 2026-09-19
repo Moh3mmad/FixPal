@@ -4,6 +4,7 @@ using FixPal.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace FixPal.Data.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260918085007_AddRequestEvidenceOwnership")]
+    partial class AddRequestEvidenceOwnership
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -397,49 +400,6 @@ namespace FixPal.Data.Migrations
 
                             t.HasCheckConstraint("CK_ProviderCalendars_UpdatedAtUtc", "DATEPART(TZOFFSET, [UpdatedAtUtc]) = 0");
                         });
-                });
-
-            modelBuilder.Entity("FixPal.Models.ProviderPortfolioItem", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("ContentType")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("Description")
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
-
-                    b.Property<bool>("IsArchived")
-                        .HasColumnType("bit");
-
-                    b.Property<int>("ProviderProfileId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("StorageKey")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<string>("Title")
-                        .IsRequired()
-                        .HasMaxLength(120)
-                        .HasColumnType("nvarchar(120)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ProviderProfileId", "IsArchived", "CreatedAtUtc", "Id");
-
-                    b.ToTable("ProviderPortfolioItems");
                 });
 
             modelBuilder.Entity("FixPal.Models.ProviderProfile", b =>
@@ -1085,17 +1045,6 @@ namespace FixPal.Data.Migrations
                     b.HasOne("FixPal.Models.ProviderProfile", "ProviderProfile")
                         .WithOne()
                         .HasForeignKey("FixPal.Models.ProviderCalendar", "ProviderProfileId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("ProviderProfile");
-                });
-
-            modelBuilder.Entity("FixPal.Models.ProviderPortfolioItem", b =>
-                {
-                    b.HasOne("FixPal.Models.ProviderProfile", "ProviderProfile")
-                        .WithMany()
-                        .HasForeignKey("ProviderProfileId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
