@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 
 namespace FixPal.Controllers;
 
@@ -41,38 +42,156 @@ public class ProviderPortfolioController(ApplicationDbContext db, RequestAccessS
     {
         var ownerId = await OwnerId(ct);
         if (ownerId == null) return Forbid();
+
         model.Title = model.Title?.Trim() ?? string.Empty;
         model.Description = model.Description?.Trim();
-        if (model.Title.Length is < 1 or > 120) ModelState.AddModelError(nameof(model.Title), "أدخل عنوانًا من 1 إلى 120 حرفًا.");
-        if (model.Description?.Length > 500) ModelState.AddModelError(nameof(model.Description), "الوصف لا يتجاوز 500 حرف.");
-        if (model.Image == null) ModelState.AddModelError(nameof(model.Image), "اختر صورة للعمل.");
-        if (!ModelState.IsValid) return View(model);
+
+        if (model.Title.Length is < 1 or > 120)
+            ModelState.AddModelError(nameof(model.Title), "أدخل عنوانًا من 1 إلى 120 حرفًا.");
+
+        if (model.Description?.Length > 500)
+            ModelState.AddModelError(nameof(model.Description), "الوصف لا يتجاوز 500 حرف.");
+
+        if (model.Image == null)
+            ModelState.AddModelError(nameof(model.Image), "اختر صورة للعمل.");
+
+        if (!ModelState.IsValid)
+            return View(model);
+
         StoredMedia? saved = null;
         var committed = false;
+
         try
         {
+            // Blob/file IO stays outside the SQL retry delegate.
             saved = await storage.SaveAsync(model.Image!, ct);
-            await using var tx = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
-            // Recheck current approval/ownership after image processing, within the write transaction.
-            if (await OwnerId(ct) != ownerId) return Forbid();
-            db.ProviderPortfolioItems.Add(new ProviderPortfolioItem
+
+            var strategy = db.Database.CreateExecutionStrategy();
+
+            var authorized = await strategy.ExecuteAsync(async () =>
             {
-                ProviderProfileId = ownerId.Value, Title = model.Title, Description = model.Description,
-                StorageKey = saved.Key, ContentType = saved.ContentType, CreatedAtUtc = DateTime.UtcNow
+                ct.ThrowIfCancellationRequested();
+
+                db.ChangeTracker.Clear();
+
+                await using var tx =
+                    await db.Database.BeginTransactionAsync(
+                        IsolationLevel.Serializable,
+                        ct);
+
+                // Recheck current approval/ownership after image processing,
+                // within the write transaction.
+                if (await OwnerId(ct) != ownerId)
+                    return false;
+
+                // If an earlier CommitAsync succeeded but its acknowledgement
+                // was lost, the same StorageKey identifies this upload.
+                var alreadyCommitted = await db.ProviderPortfolioItems
+                    .AsNoTracking()
+                    .AnyAsync(
+                        p => p.ProviderProfileId == ownerId.Value
+                             && p.StorageKey == saved.Key,
+                        ct);
+
+                if (!alreadyCommitted)
+                {
+                    db.ProviderPortfolioItems.Add(
+                        new ProviderPortfolioItem
+                        {
+                            ProviderProfileId = ownerId.Value,
+                            Title = model.Title,
+                            Description = model.Description,
+                            StorageKey = saved.Key,
+                            ContentType = saved.ContentType,
+                            CreatedAtUtc = DateTime.UtcNow
+                        });
+
+                    await db.SaveChangesAsync(ct);
+                }
+
+                await tx.CommitAsync(ct);
+                return true;
             });
-            await db.SaveChangesAsync(ct);
-            await tx.CommitAsync(ct);
+
+            if (!authorized)
+                return Forbid();
+
             committed = true;
-            TempData["SuccessMessage"] = "نُشر العمل في ملفك العام.";
+
+            TempData["SuccessMessage"] =
+                "نُشر العمل في ملفك العام.";
+
             return RedirectToAction(nameof(Index));
         }
-        catch (Exception ex) when (ex is InvalidDataException or IOException or DbUpdateException)
+        catch (Exception ex) when (
+            ex is InvalidDataException
+                or IOException
+                or DbUpdateException
+                or RetryLimitExceededException)
         {
-            logger.LogWarning(ex, "Portfolio creation failed for provider {ProviderId}", ownerId);
-            ModelState.AddModelError(string.Empty, ex is InvalidDataException ? ex.Message : "تعذر حفظ العمل. حاول مجددًا.");
+            db.ChangeTracker.Clear();
+
+            logger.LogWarning(
+                ex,
+                "Portfolio creation failed for provider {ProviderId}",
+                ownerId);
+
+            ModelState.AddModelError(
+                string.Empty,
+                ex is InvalidDataException
+                    ? ex.Message
+                    : "تعذر حفظ العمل. حاول مجددًا.");
+
             return View(model);
         }
-        finally { if (saved != null && !committed) await storage.DeleteAsync(saved.Key, CancellationToken.None); }
+        finally
+        {
+            if (saved != null && !committed)
+            {
+                // Before deleting the uploaded media, verify that an uncertain
+                // SQL commit did not actually create a row referencing it.
+                var referenced = true;
+
+                try
+                {
+                    db.ChangeTracker.Clear();
+
+                    referenced = await db.ProviderPortfolioItems
+                        .AsNoTracking()
+                        .AnyAsync(
+                            p => p.ProviderProfileId == ownerId.Value
+                                 && p.StorageKey == saved.Key,
+                            CancellationToken.None);
+                }
+                catch (Exception cleanupCheckEx)
+                {
+                    // If SQL cannot confirm the final state, preserving an
+                    // orphaned blob is safer than deleting media referenced
+                    // by a transaction that may actually have committed.
+                    logger.LogWarning(
+                        cleanupCheckEx,
+                        "Could not verify portfolio media reference for {StorageKey}; media was preserved.",
+                        saved.Key);
+                }
+
+                if (!referenced)
+                {
+                    try
+                    {
+                        await storage.DeleteAsync(
+                            saved.Key,
+                            CancellationToken.None);
+                    }
+                    catch (Exception cleanupEx)
+                    {
+                        logger.LogWarning(
+                            cleanupEx,
+                            "Could not clean up portfolio media {StorageKey}.",
+                            saved.Key);
+                    }
+                }
+            }
+        }
     }
 
     [HttpPost, EnableRateLimiting("writes")]

@@ -1,4 +1,5 @@
 using FixPal.Data;
+using System.Data;
 using FixPal.Infrastructure.Identity;
 using FixPal.Models;
 using FixPal.Models.Enums;
@@ -8,6 +9,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 namespace FixPal.Controllers;
 [Authorize]
 [ResponseCache(Location = ResponseCacheLocation.None, NoStore = true)]
@@ -54,35 +56,201 @@ public class MaintenanceRequestsController(ApplicationDbContext db, UserManager<
     {
         var user = await users.GetUserAsync(User);
         if (user == null) return Challenge();
-        await using var tx = await db.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable, ct);
+
         model.Title = model.Title?.Trim() ?? string.Empty;
         model.Description = model.Description?.Trim() ?? string.Empty;
-        if (model.Latitude.HasValue != model.Longitude.HasValue || (model.Latitude.HasValue && (!double.IsFinite(model.Latitude.Value) || !double.IsFinite(model.Longitude!.Value))))
-            ModelState.AddModelError(nameof(model.Latitude), "حدد إحداثيين صالحين، أو امسح الموقع واستخدم المدينة والمنطقة.");
-        if (model.Title.Length < 5) ModelState.AddModelError(nameof(model.Title), "اكتب عنوانًا واضحًا من 5 أحرف على الأقل.");
-        if (model.Description.Length < 10) ModelState.AddModelError(nameof(model.Description), "أضف تفاصيل من 10 أحرف على الأقل.");
-        if (!await db.ServiceCategories.AnyAsync(c => c.Id == model.ServiceCategoryId, ct))
-            ModelState.AddModelError(nameof(model.ServiceCategoryId), "التخصص غير متاح.");
-        if (!await db.Areas.AnyAsync(a => a.Id == model.AreaId && a.CityId == model.CityId && a.City.IsActive, ct))
-            ModelState.AddModelError(nameof(model.AreaId), "اختر منطقة تابعة للمدينة المحددة.");
-        if (model.RequestType == RequestType.PublicReport && model.ProviderProfileId.HasValue)
-            ModelState.AddModelError(nameof(model.ProviderProfileId), "البلاغ العام يُسجل بدون تعيين مزود في هذه النسخة.");
-        if (model.ProviderProfileId.HasValue && !await FixPal.Services.ProviderEligibility.ForRequest(db, model.ServiceCategoryId, model.AreaId, user.Id).AnyAsync(p => p.Id == model.ProviderProfileId, ct))
-            ModelState.AddModelError(nameof(model.ProviderProfileId), "المزود غير متاح لهذا التخصص والمنطقة. اختر مزودًا آخر أو اترك الطلب بدون تعيين.");
-        if (!ModelState.IsValid) { await LoadOptions(model, ct); return View(model); }
-        var request = new MaintenanceRequest
+
+        if (model.Latitude.HasValue != model.Longitude.HasValue
+            || (model.Latitude.HasValue
+                && (!double.IsFinite(model.Latitude.Value)
+                    || !double.IsFinite(model.Longitude!.Value))))
         {
-            CustomerId = user.Id, Title = model.Title, Description = model.Description, RequestType = model.RequestType,
-            ServiceCategoryId = model.ServiceCategoryId, AreaId = model.AreaId, ProviderProfileId = model.ProviderProfileId,
-            Status = MaintenanceRequestStatus.Pending, CreatedAtUtc = DateTime.UtcNow
-            , Latitude = model.Latitude.HasValue ? Math.Round(model.Latitude.Value, 5) : null,
-            Longitude = model.Longitude.HasValue ? Math.Round(model.Longitude.Value, 5) : null
-        };
-        db.MaintenanceRequests.Add(request);
-        await db.SaveChangesAsync(ct);
-        await tx.CommitAsync(ct);
-        TempData["SuccessMessage"] = "تم تسجيل طلبك. يمكنك متابعة حالته من هذه الصفحة.";
-        return RedirectToAction(nameof(Details), new { id = request.Id });
+            ModelState.AddModelError(
+                nameof(model.Latitude),
+                "حدد إحداثيين صالحين، أو امسح الموقع واستخدم المدينة والمنطقة.");
+        }
+
+        if (model.Title.Length < 5)
+            ModelState.AddModelError(
+                nameof(model.Title),
+                "اكتب عنوانًا واضحًا من 5 أحرف على الأقل.");
+
+        if (model.Description.Length < 10)
+            ModelState.AddModelError(
+                nameof(model.Description),
+                "أضف تفاصيل من 10 أحرف على الأقل.");
+
+        if (!await db.ServiceCategories
+            .AsNoTracking()
+            .AnyAsync(c => c.Id == model.ServiceCategoryId, ct))
+        {
+            ModelState.AddModelError(
+                nameof(model.ServiceCategoryId),
+                "التخصص غير متاح.");
+        }
+
+        if (!await db.Areas
+            .AsNoTracking()
+            .AnyAsync(
+                a => a.Id == model.AreaId
+                     && a.CityId == model.CityId
+                     && a.City.IsActive,
+                ct))
+        {
+            ModelState.AddModelError(
+                nameof(model.AreaId),
+                "اختر منطقة تابعة للمدينة المحددة.");
+        }
+
+        if (model.RequestType == RequestType.PublicReport
+            && model.ProviderProfileId.HasValue)
+        {
+            ModelState.AddModelError(
+                nameof(model.ProviderProfileId),
+                "البلاغ العام يُسجل بدون تعيين مزود في هذه النسخة.");
+        }
+
+        if (model.ProviderProfileId.HasValue
+            && !await FixPal.Services.ProviderEligibility
+                .ForRequest(
+                    db,
+                    model.ServiceCategoryId,
+                    model.AreaId,
+                    user.Id)
+                .AsNoTracking()
+                .AnyAsync(
+                    p => p.Id == model.ProviderProfileId.Value,
+                    ct))
+        {
+            ModelState.AddModelError(
+                nameof(model.ProviderProfileId),
+                "المزود غير متاح لهذا التخصص والمنطقة. اختر مزودًا آخر أو اترك الطلب بدون تعيين.");
+        }
+
+        if (!ModelState.IsValid)
+        {
+            await LoadOptions(model, ct);
+            return View(model);
+        }
+
+        var strategy = db.Database.CreateExecutionStrategy();
+        var createdRequestId = 0;
+
+        var result = await strategy.ExecuteAsync(async () =>
+        {
+            ct.ThrowIfCancellationRequested();
+
+            db.ChangeTracker.Clear();
+
+            // If CommitAsync from a previous attempt actually succeeded,
+            // do not create a duplicate request.
+            if (createdRequestId > 0)
+            {
+                var committed = await db.MaintenanceRequests
+                    .AsNoTracking()
+                    .AnyAsync(
+                        r => r.Id == createdRequestId
+                             && r.CustomerId == user.Id,
+                        ct);
+
+                if (committed)
+                    return (Succeeded: true, Field: (string?)null, Message: (string?)null);
+
+                createdRequestId = 0;
+            }
+
+            await using var tx = await db.Database.BeginTransactionAsync(
+                IsolationLevel.Serializable,
+                ct);
+
+            // Revalidate relational choices inside the transaction as well.
+            if (!await db.ServiceCategories
+                .AsNoTracking()
+                .AnyAsync(c => c.Id == model.ServiceCategoryId, ct))
+            {
+                return (
+                    Succeeded: false,
+                    Field: nameof(model.ServiceCategoryId),
+                    Message: "التخصص غير متاح.");
+            }
+
+            if (!await db.Areas
+                .AsNoTracking()
+                .AnyAsync(
+                    a => a.Id == model.AreaId
+                         && a.CityId == model.CityId
+                         && a.City.IsActive,
+                    ct))
+            {
+                return (
+                    Succeeded: false,
+                    Field: nameof(model.AreaId),
+                    Message: "اختر منطقة تابعة للمدينة المحددة.");
+            }
+
+            if (model.ProviderProfileId.HasValue
+                && !await FixPal.Services.ProviderEligibility
+                    .ForRequest(
+                        db,
+                        model.ServiceCategoryId,
+                        model.AreaId,
+                        user.Id)
+                    .AsNoTracking()
+                    .AnyAsync(
+                        p => p.Id == model.ProviderProfileId.Value,
+                        ct))
+            {
+                return (
+                    Succeeded: false,
+                    Field: nameof(model.ProviderProfileId),
+                    Message: "المزود غير متاح لهذا التخصص والمنطقة. اختر مزودًا آخر أو اترك الطلب بدون تعيين.");
+            }
+
+            var request = new MaintenanceRequest
+            {
+                CustomerId = user.Id,
+                Title = model.Title,
+                Description = model.Description,
+                RequestType = model.RequestType,
+                ServiceCategoryId = model.ServiceCategoryId,
+                AreaId = model.AreaId,
+                ProviderProfileId = model.ProviderProfileId,
+                Status = MaintenanceRequestStatus.Pending,
+                CreatedAtUtc = DateTime.UtcNow,
+                Latitude = model.Latitude.HasValue
+                    ? Math.Round(model.Latitude.Value, 5)
+                    : null,
+                Longitude = model.Longitude.HasValue
+                    ? Math.Round(model.Longitude.Value, 5)
+                    : null
+            };
+
+            db.MaintenanceRequests.Add(request);
+            await db.SaveChangesAsync(ct);
+
+            createdRequestId = request.Id;
+
+            await tx.CommitAsync(ct);
+
+            return (Succeeded: true, Field: (string?)null, Message: (string?)null);
+        });
+
+        if (!result.Succeeded)
+        {
+            ModelState.AddModelError(
+                result.Field ?? string.Empty,
+                result.Message ?? "تعذر تسجيل الطلب.");
+
+            await LoadOptions(model, ct);
+            return View(model);
+        }
+
+        TempData["SuccessMessage"] =
+            "تم تسجيل طلبك. يمكنك متابعة حالته من هذه الصفحة.";
+
+        return RedirectToAction(
+            nameof(Details),
+            new { id = createdRequestId });
     }
     [HttpGet]
     public async Task<IActionResult> Details(int id, int quotePage = 1, CancellationToken ct = default)

@@ -5,6 +5,7 @@ using FixPal.Models;
 using FixPal.Models.Enums;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 
 namespace FixPal.Services;
 
@@ -32,142 +33,364 @@ public sealed class ProviderBlackoutService(
     }
 
     public async Task<ProviderBlackoutResult> CreateAsync(ClaimsPrincipal user,
-        CreateProviderBlackoutCommand command, CancellationToken ct)
+     CreateProviderBlackoutCommand command, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(command);
         var provider = await ResolveActiveProviderAsync(user, ct);
         if (provider == null) return Result(ProviderBlackoutStatus.Forbidden);
+
         EnsureIndependentWrite();
+
+        var strategy = db.Database.CreateExecutionStrategy();
         ProviderBlackout? addedBlackout = null;
+        var createdBlackoutId = 0;
+
         try
         {
-            await using var tx = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
-            var currentProvider = await ResolveActiveProviderAsync(user, ct);
-            if (currentProvider != provider) return Result(ProviderBlackoutStatus.Forbidden);
-
-            var calendar = await LockCalendarAsync(provider.ProviderId, ct);
-            if (calendar == null) return Result(ProviderBlackoutStatus.NotFound);
-            var versionResult = ValidateVersion(command.ExpectedCalendarRowVersion, calendar.RowVersion);
-            if (versionResult != null) return versionResult;
-
-            TimeZoneInfo zone;
-            try { zone = TimeZoneInfo.FindSystemTimeZoneById(calendar.TimeZoneId); }
-            catch (TimeZoneNotFoundException)
-            { return Error(ProviderBlackoutStatus.Conflict, "TimeZoneId", "CalendarTimeZoneUnavailable"); }
-            catch (InvalidTimeZoneException)
-            { return Error(ProviderBlackoutStatus.Conflict, "TimeZoneId", "CalendarTimeZoneInvalid"); }
-
-            var resolved = timePolicy.ResolveLocalInterval(command.StartLocal, command.EndLocal, zone);
-            if (!resolved.IsSuccess)
-                return Error(ProviderBlackoutStatus.ValidationFailed, TimeField(resolved.Error), TimeCode(resolved.Error));
-            var interval = resolved.Interval!;
-            if (!timePolicy.IsFutureStart(interval.StartUtc))
-                return Error(ProviderBlackoutStatus.ValidationFailed, nameof(command.StartLocal), "StartMustBeFuture");
-
-            var blackoutConflict = await db.ProviderBlackouts.AsNoTracking().AnyAsync(b =>
-                b.ProviderProfileId == provider.ProviderId && b.RemovedAtUtc == null
-                && b.StartUtc < interval.EndUtc && interval.StartUtc < b.EndUtc, ct);
-            if (blackoutConflict)
-                return Error(ProviderBlackoutStatus.Conflict, string.Empty, "BlackoutOverlap");
-
-            var appointmentConflict = await db.Appointments.AsNoTracking().AnyAsync(a =>
-                a.ProviderProfileId == provider.ProviderId
-                && ((a.Status == AppointmentStatus.Confirmed
-                        && a.StartUtc < interval.EndUtc && interval.StartUtc < a.EndUtc)
-                    || (a.Status == AppointmentStatus.InProgress && a.StartUtc < interval.EndUtc)), ct);
-            if (appointmentConflict)
-                return Error(ProviderBlackoutStatus.Conflict, string.Empty, "AppointmentOverlap");
-
-            var now = timeProvider.GetUtcNow();
-            addedBlackout = new ProviderBlackout
+            return await strategy.ExecuteAsync(async () =>
             {
-                ProviderProfileId = provider.ProviderId,
-                StartUtc = interval.StartUtc,
-                EndUtc = interval.EndUtc,
-                CreatedAtUtc = now,
-                CreatedByUserId = provider.UserId,
-                RemovedAtUtc = null,
-                RemovedByUserId = null
-            };
-            db.ProviderBlackouts.Add(addedBlackout);
-            await db.SaveChangesAsync(ct);
-            var changed = await AdvanceCalendarAsync(provider.ProviderId, calendar.RowVersion, now, ct);
-            if (changed != 1)
-                return Error(ProviderBlackoutStatus.Stale, nameof(command.ExpectedCalendarRowVersion), "CalendarChanged");
-            await tx.CommitAsync(ct);
-            return Result(ProviderBlackoutStatus.Success);
+                ct.ThrowIfCancellationRequested();
+
+                db.ChangeTracker.Clear();
+                addedBlackout = null;
+
+                // If CommitAsync from a previous attempt succeeded but its
+                // acknowledgement was lost, do not create the blackout twice.
+                if (createdBlackoutId > 0)
+                {
+                    var committed = await db.ProviderBlackouts.AsNoTracking()
+                        .AnyAsync(b =>
+                            b.Id == createdBlackoutId
+                            && b.ProviderProfileId == provider.ProviderId
+                            && b.CreatedByUserId == provider.UserId, ct);
+
+                    if (committed)
+                        return Result(ProviderBlackoutStatus.Success);
+
+                    createdBlackoutId = 0;
+                }
+
+                await using var tx = await db.Database.BeginTransactionAsync(
+                    IsolationLevel.Serializable, ct);
+
+                var currentProvider = await ResolveActiveProviderAsync(user, ct);
+                if (currentProvider != provider)
+                    return Result(ProviderBlackoutStatus.Forbidden);
+
+                var calendar = await LockCalendarAsync(provider.ProviderId, ct);
+                if (calendar == null)
+                    return Result(ProviderBlackoutStatus.NotFound);
+
+                var versionResult = ValidateVersion(
+                    command.ExpectedCalendarRowVersion,
+                    calendar.RowVersion);
+
+                if (versionResult != null)
+                    return versionResult;
+
+                TimeZoneInfo zone;
+                try
+                {
+                    zone = TimeZoneInfo.FindSystemTimeZoneById(
+                        calendar.TimeZoneId);
+                }
+                catch (TimeZoneNotFoundException)
+                {
+                    return Error(
+                        ProviderBlackoutStatus.Conflict,
+                        "TimeZoneId",
+                        "CalendarTimeZoneUnavailable");
+                }
+                catch (InvalidTimeZoneException)
+                {
+                    return Error(
+                        ProviderBlackoutStatus.Conflict,
+                        "TimeZoneId",
+                        "CalendarTimeZoneInvalid");
+                }
+
+                var resolved = timePolicy.ResolveLocalInterval(
+                    command.StartLocal,
+                    command.EndLocal,
+                    zone);
+
+                if (!resolved.IsSuccess)
+                {
+                    return Error(
+                        ProviderBlackoutStatus.ValidationFailed,
+                        TimeField(resolved.Error),
+                        TimeCode(resolved.Error));
+                }
+
+                var interval = resolved.Interval!;
+
+                if (!timePolicy.IsFutureStart(interval.StartUtc))
+                {
+                    return Error(
+                        ProviderBlackoutStatus.ValidationFailed,
+                        nameof(command.StartLocal),
+                        "StartMustBeFuture");
+                }
+
+                var blackoutConflict = await db.ProviderBlackouts.AsNoTracking()
+                    .AnyAsync(b =>
+                        b.ProviderProfileId == provider.ProviderId
+                        && b.RemovedAtUtc == null
+                        && b.StartUtc < interval.EndUtc
+                        && interval.StartUtc < b.EndUtc, ct);
+
+                if (blackoutConflict)
+                {
+                    return Error(
+                        ProviderBlackoutStatus.Conflict,
+                        string.Empty,
+                        "BlackoutOverlap");
+                }
+
+                var appointmentConflict = await db.Appointments.AsNoTracking()
+                    .AnyAsync(a =>
+                        a.ProviderProfileId == provider.ProviderId
+                        && ((a.Status == AppointmentStatus.Confirmed
+                             && a.StartUtc < interval.EndUtc
+                             && interval.StartUtc < a.EndUtc)
+                            || (a.Status == AppointmentStatus.InProgress
+                                && a.StartUtc < interval.EndUtc)), ct);
+
+                if (appointmentConflict)
+                {
+                    return Error(
+                        ProviderBlackoutStatus.Conflict,
+                        string.Empty,
+                        "AppointmentOverlap");
+                }
+
+                var now = timeProvider.GetUtcNow();
+
+                addedBlackout = new ProviderBlackout
+                {
+                    ProviderProfileId = provider.ProviderId,
+                    StartUtc = interval.StartUtc,
+                    EndUtc = interval.EndUtc,
+                    CreatedAtUtc = now,
+                    CreatedByUserId = provider.UserId,
+                    RemovedAtUtc = null,
+                    RemovedByUserId = null
+                };
+
+                db.ProviderBlackouts.Add(addedBlackout);
+                await db.SaveChangesAsync(ct);
+
+                createdBlackoutId = addedBlackout.Id;
+
+                var changed = await AdvanceCalendarAsync(
+                    provider.ProviderId,
+                    calendar.RowVersion,
+                    now,
+                    ct);
+
+                if (changed != 1)
+                {
+                    return Error(
+                        ProviderBlackoutStatus.Stale,
+                        nameof(command.ExpectedCalendarRowVersion),
+                        "CalendarChanged");
+                }
+
+                await tx.CommitAsync(ct);
+
+                return Result(ProviderBlackoutStatus.Success);
+            });
         }
         catch (Exception ex) when (IsExpectedConflict(ex))
         {
-            logger.LogWarning("Concurrent blackout creation rejected for provider {ProviderId}", provider.ProviderId);
+            db.ChangeTracker.Clear();
+
+            logger.LogWarning(
+                ex,
+                "Concurrent blackout creation rejected for provider {ProviderId}",
+                provider.ProviderId);
+
             return Result(ProviderBlackoutStatus.Conflict);
         }
         finally
         {
-            if (addedBlackout != null) db.Entry(addedBlackout).State = EntityState.Detached;
+            if (addedBlackout != null
+                && db.Entry(addedBlackout).State != EntityState.Detached)
+            {
+                db.Entry(addedBlackout).State = EntityState.Detached;
+            }
         }
     }
 
     public async Task<ProviderBlackoutResult> RemoveAsync(ClaimsPrincipal user,
-        RemoveProviderBlackoutCommand command, CancellationToken ct)
+    RemoveProviderBlackoutCommand command, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(command);
+
         if (command.BlackoutId <= 0)
-            return Error(ProviderBlackoutStatus.ValidationFailed, nameof(command.BlackoutId), "InvalidBlackoutId");
+        {
+            return Error(
+                ProviderBlackoutStatus.ValidationFailed,
+                nameof(command.BlackoutId),
+                "InvalidBlackoutId");
+        }
+
         var provider = await ResolveActiveProviderAsync(user, ct);
-        if (provider == null) return Result(ProviderBlackoutStatus.Forbidden);
+        if (provider == null)
+            return Result(ProviderBlackoutStatus.Forbidden);
+
         EnsureIndependentWrite();
+
+        var strategy = db.Database.CreateExecutionStrategy();
+        var commitAttempted = false;
+        DateTimeOffset? attemptedRemovalAt = null;
+
         try
         {
-            await using var tx = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
-            var currentProvider = await ResolveActiveProviderAsync(user, ct);
-            if (currentProvider != provider) return Result(ProviderBlackoutStatus.Forbidden);
+            return await strategy.ExecuteAsync(async () =>
+            {
+                ct.ThrowIfCancellationRequested();
 
-            var calendar = await LockCalendarAsync(provider.ProviderId, ct);
-            if (calendar == null) return Result(ProviderBlackoutStatus.NotFound);
-            var versionResult = ValidateVersion(command.ExpectedCalendarRowVersion, calendar.RowVersion);
-            if (versionResult != null) return versionResult;
+                db.ChangeTracker.Clear();
 
-            var blackout = await db.ProviderBlackouts.AsNoTracking()
-                .Where(b => b.Id == command.BlackoutId && b.ProviderProfileId == provider.ProviderId)
-                .Select(b => new { b.RemovedAtUtc }).SingleOrDefaultAsync(ct);
-            if (blackout == null) return Result(ProviderBlackoutStatus.NotFound);
-            if (blackout.RemovedAtUtc != null)
-                return Error(ProviderBlackoutStatus.Conflict, nameof(command.BlackoutId), "BlackoutAlreadyRemoved");
+                // Verify an uncertain previous CommitAsync before repeating
+                // the removal.
+                if (commitAttempted && attemptedRemovalAt.HasValue)
+                {
+                    var committed = await db.ProviderBlackouts.AsNoTracking()
+                        .AnyAsync(b =>
+                            b.Id == command.BlackoutId
+                            && b.ProviderProfileId == provider.ProviderId
+                            && b.RemovedAtUtc == attemptedRemovalAt.Value
+                            && b.RemovedByUserId == provider.UserId, ct);
 
-            var now = timeProvider.GetUtcNow();
-            var removed = await db.ProviderBlackouts
-                .Where(b => b.Id == command.BlackoutId && b.ProviderProfileId == provider.ProviderId && b.RemovedAtUtc == null)
-                .ExecuteUpdateAsync(s => s.SetProperty(b => b.RemovedAtUtc, now)
-                    .SetProperty(b => b.RemovedByUserId, provider.UserId), ct);
-            if (removed != 1)
-                return Error(ProviderBlackoutStatus.Conflict, nameof(command.BlackoutId), "BlackoutAlreadyRemoved");
-            var changed = await AdvanceCalendarAsync(provider.ProviderId, calendar.RowVersion, now, ct);
-            if (changed != 1)
-                return Error(ProviderBlackoutStatus.Stale, nameof(command.ExpectedCalendarRowVersion), "CalendarChanged");
-            await tx.CommitAsync(ct);
-            return Result(ProviderBlackoutStatus.Success);
+                    if (committed)
+                        return Result(ProviderBlackoutStatus.Success);
+
+                    commitAttempted = false;
+                    attemptedRemovalAt = null;
+                }
+
+                await using var tx = await db.Database.BeginTransactionAsync(
+                    IsolationLevel.Serializable, ct);
+
+                var currentProvider = await ResolveActiveProviderAsync(user, ct);
+                if (currentProvider != provider)
+                    return Result(ProviderBlackoutStatus.Forbidden);
+
+                var calendar = await LockCalendarAsync(provider.ProviderId, ct);
+                if (calendar == null)
+                    return Result(ProviderBlackoutStatus.NotFound);
+
+                var versionResult = ValidateVersion(
+                    command.ExpectedCalendarRowVersion,
+                    calendar.RowVersion);
+
+                if (versionResult != null)
+                    return versionResult;
+
+                var blackout = await db.ProviderBlackouts.AsNoTracking()
+                    .Where(b =>
+                        b.Id == command.BlackoutId
+                        && b.ProviderProfileId == provider.ProviderId)
+                    .Select(b => new { b.RemovedAtUtc })
+                    .SingleOrDefaultAsync(ct);
+
+                if (blackout == null)
+                    return Result(ProviderBlackoutStatus.NotFound);
+
+                if (blackout.RemovedAtUtc != null)
+                {
+                    return Error(
+                        ProviderBlackoutStatus.Conflict,
+                        nameof(command.BlackoutId),
+                        "BlackoutAlreadyRemoved");
+                }
+
+                var now = timeProvider.GetUtcNow();
+
+                var removed = await db.ProviderBlackouts
+                    .Where(b =>
+                        b.Id == command.BlackoutId
+                        && b.ProviderProfileId == provider.ProviderId
+                        && b.RemovedAtUtc == null)
+                    .ExecuteUpdateAsync(s => s
+                        .SetProperty(b => b.RemovedAtUtc, now)
+                        .SetProperty(b => b.RemovedByUserId, provider.UserId), ct);
+
+                if (removed != 1)
+                {
+                    return Error(
+                        ProviderBlackoutStatus.Conflict,
+                        nameof(command.BlackoutId),
+                        "BlackoutAlreadyRemoved");
+                }
+
+                var changed = await AdvanceCalendarAsync(
+                    provider.ProviderId,
+                    calendar.RowVersion,
+                    now,
+                    ct);
+
+                if (changed != 1)
+                {
+                    return Error(
+                        ProviderBlackoutStatus.Stale,
+                        nameof(command.ExpectedCalendarRowVersion),
+                        "CalendarChanged");
+                }
+
+                attemptedRemovalAt = now;
+                commitAttempted = true;
+
+                await tx.CommitAsync(ct);
+
+                return Result(ProviderBlackoutStatus.Success);
+            });
         }
         catch (Exception ex) when (IsExpectedConflict(ex))
         {
-            logger.LogWarning("Concurrent blackout removal rejected for provider {ProviderId}", provider.ProviderId);
+            db.ChangeTracker.Clear();
+
+            logger.LogWarning(
+                ex,
+                "Concurrent blackout removal rejected for provider {ProviderId}",
+                provider.ProviderId);
+
             return Result(ProviderBlackoutStatus.Conflict);
         }
     }
-
-    private async Task<ActiveProvider?> ResolveActiveProviderAsync(ClaimsPrincipal user, CancellationToken ct)
+    private async Task<ActiveProvider?> ResolveActiveProviderAsync(
+    ClaimsPrincipal user,
+    CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(user);
-        if (user.Identity?.IsAuthenticated != true) return null;
-        var userId = user.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (userId == null) return null;
-        var providerId = await access.ProviderIdAsync(user, ct);
-        if (providerId == null) return null;
-        return await ProviderEligibility.Active(db).AsNoTracking()
-            .AnyAsync(p => p.Id == providerId && p.UserId == userId, ct)
-            ? new(providerId.Value, userId) : null;
-    }
 
+        if (user.Identity?.IsAuthenticated != true)
+            return null;
+
+        var userId =
+            user.FindFirstValue(ClaimTypes.NameIdentifier);
+
+        if (userId == null)
+            return null;
+
+        var providerId =
+            await access.ProviderIdAsync(user, ct);
+
+        if (providerId == null)
+            return null;
+
+        return await ProviderEligibility
+            .Active(db)
+            .AsNoTracking()
+            .AnyAsync(
+                p => p.Id == providerId.Value
+                     && p.UserId == userId,
+                ct)
+            ? new ActiveProvider(providerId.Value, userId)
+            : null;
+    }
     private Task<ProviderCalendar?> LockCalendarAsync(int providerId, CancellationToken ct) =>
         db.ProviderCalendars.FromSqlInterpolated(
             $"SELECT * FROM [ProviderCalendars] WITH (UPDLOCK, HOLDLOCK) WHERE [ProviderProfileId] = {providerId}")
