@@ -103,6 +103,53 @@ public sealed class ProviderPortfolioTests(SqlSchedulingFixture fixture)
     }
 
     [SqlServerFact]
+    public async Task OwnerRestoresSameArchivedRecordAndPublicImage_OtherActorsCannotRestore()
+    {
+        fixture.RequireLocalDb();
+        await using var s = await fixture.CreateScenarioAsync();
+        await using var other = await fixture.CreateScenarioAsync();
+        using var media = new TestMedia();
+        var owner = Controller(s, s.Provider, media.Portfolio);
+        await owner.Create(Input(), default);
+        var original = await s.Db.ProviderPortfolioItems.AsNoTracking()
+            .SingleAsync(p => p.ProviderProfileId == s.ProviderProfileId);
+        await owner.Archive(original.Id, default);
+
+        var unrelated = Controller(s, other.Provider, media.Portfolio);
+        unrelated.Request.Form = new FormCollection(new Dictionary<string, Microsoft.Extensions.Primitives.StringValues>
+        {
+            ["ProviderProfileId"] = s.ProviderProfileId.ToString(), ["UserId"] = s.ProviderId
+        });
+        var denied = Assert.IsType<NotFoundObjectResult>(await unrelated.Restore(original.Id, default));
+        Assert.Contains("تعذر إعادة نشر العمل", Assert.IsType<string>(denied.Value));
+        foreach (var actor in new[] { s.Customer, Anonymous() })
+            Assert.IsType<ForbidResult>(await Controller(s, actor, media.Portfolio).Restore(original.Id, default));
+        Assert.Empty((await Profile(s, s.ProviderProfileId)).Portfolio.Items);
+        Assert.IsType<NotFoundResult>(await Controller(s, Anonymous(), media.Portfolio).Image(original.Id, default));
+        var archived = Assert.IsType<PagedResult<PortfolioItemViewModel>>(Assert.IsType<ViewResult>(await owner.Index()).Model);
+        Assert.True(Assert.Single(archived.Items).IsArchived);
+
+        Assert.IsType<RedirectToActionResult>(await owner.Restore(original.Id, default));
+        Assert.Equal("أُعيد نشر العمل في ملفك العام.", owner.TempData["SuccessMessage"]);
+        var restored = Assert.Single(await s.Db.ProviderPortfolioItems.AsNoTracking()
+            .Where(p => p.ProviderProfileId == s.ProviderProfileId).ToListAsync());
+        Assert.False(restored.IsArchived);
+        Assert.Equal(original.Id, restored.Id);
+        Assert.Equal(original.StorageKey, restored.StorageKey);
+        Assert.Equal(original.CreatedAtUtc, restored.CreatedAtUtc);
+        Assert.Equal(original.Title, restored.Title);
+        Assert.Equal(original.Id, Assert.Single((await Profile(s, s.ProviderProfileId)).Portfolio.Items).Id);
+        var image = Assert.IsType<FileStreamResult>(await Controller(s, Anonymous(), media.Portfolio).Image(original.Id, default));
+        await image.FileStream.DisposeAsync();
+
+        await owner.Archive(original.Id, default);
+        await s.Db.ProviderProfiles.Where(p => p.Id == s.ProviderProfileId)
+            .ExecuteUpdateAsync(p => p.SetProperty(x => x.ApprovalStatus, ApprovalStatus.Pending));
+        Assert.IsType<ForbidResult>(await owner.Restore(original.Id, default));
+        Assert.True(await s.Db.ProviderPortfolioItems.AsNoTracking().Where(p => p.Id == original.Id).Select(p => p.IsArchived).SingleAsync());
+    }
+
+    [SqlServerFact]
     public async Task RealValidatorRejectsFakeTruncatedOversizedAndEmptyImages_AndBoundsMetadata()
     {
         fixture.RequireLocalDb();

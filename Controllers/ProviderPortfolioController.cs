@@ -88,6 +88,19 @@ public class ProviderPortfolioController(ApplicationDbContext db, RequestAccessS
         return RedirectToAction(nameof(Index));
     }
 
+    [HttpPost, EnableRateLimiting("writes")]
+    public async Task<IActionResult> Restore(int id, CancellationToken ct)
+    {
+        var ownerId = await OwnerId(ct);
+        if (ownerId == null) return Forbid();
+        var changed = await db.ProviderPortfolioItems.Where(p => p.Id == id && p.ProviderProfileId == ownerId
+                && ProviderEligibility.Active(db).Any(owner => owner.Id == p.ProviderProfileId))
+            .ExecuteUpdateAsync(s => s.SetProperty(p => p.IsArchived, false), ct);
+        if (changed == 0) return NotFound("تعذر إعادة نشر العمل. لم يُعثر على عمل متاح لإعادة النشر في حسابك.");
+        TempData["SuccessMessage"] = "أُعيد نشر العمل في ملفك العام.";
+        return RedirectToAction(nameof(Index));
+    }
+
     [HttpGet, AllowAnonymous]
     public async Task<IActionResult> Image(int id, CancellationToken ct)
     {
