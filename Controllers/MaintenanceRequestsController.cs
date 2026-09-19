@@ -22,7 +22,7 @@ public class MaintenanceRequestsController(ApplicationDbContext db, UserManager<
             .Select(RequestSummaryViewModel.Projection), page, ct));
     }
     [HttpGet]
-    public async Task<IActionResult> Create(int? providerProfileId, int? categoryId, RequestType requestType = RequestType.PrivateService, CancellationToken ct = default)
+    public async Task<IActionResult> Create(int? providerProfileId, int? categoryId, int? cityId = null, int? areaId = null, RequestType requestType = RequestType.PrivateService, CancellationToken ct = default)
     {
         var model = new CreateMaintenanceRequestViewModel { ServiceCategoryId = categoryId ?? 0, RequestType = Enum.IsDefined(requestType) ? requestType : RequestType.PrivateService };
         if (providerProfileId.HasValue)
@@ -33,6 +33,18 @@ public class MaintenanceRequestsController(ApplicationDbContext db, UserManager<
             if (provider == null) return NotFound();
             model.ProviderProfileId = provider.Id; model.ServiceCategoryId = provider.ServiceCategoryId;
             model.CityId = provider.CityId; model.AreaId = provider.AreaId; model.SelectedProviderName = provider.DisplayName;
+        }
+        else if (cityId.HasValue && areaId.HasValue)
+        {
+            var location = await db.Areas.AsNoTracking()
+                .Where(a => a.Id == areaId && a.CityId == cityId && a.City.IsActive)
+                .Select(a => new { a.Id, a.CityId })
+                .SingleOrDefaultAsync(ct);
+            if (location != null)
+            {
+                model.CityId = location.CityId;
+                model.AreaId = location.Id;
+            }
         }
         await LoadOptions(model, ct);
         return View(model);

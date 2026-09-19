@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.RateLimiting;
+using FixPal.Features.Dalil;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
@@ -27,7 +28,7 @@ builder.Services.AddScoped<FixPal.Services.IPortfolioMediaStorage, FixPal.Servic
 
 builder.Services.Configure<FixPal.Services.DiagnosisOptions>(builder.Configuration.GetSection("Diagnosis"));
 builder.Services.AddHttpClient<FixPal.Services.IProblemDiagnosisService, FixPal.Services.OpenAiProblemDiagnosisService>().ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
-
+builder.Services.AddDalilAssistant(builder.Configuration);
 var connectionString =
     builder.Configuration.GetConnectionString("DefaultConnection")
     ?? throw new InvalidOperationException(

@@ -1,0 +1,61 @@
+@{
+    var endpoint = Url.Action("Send", "DalilAssistant") ?? "/DalilAssistant/Send";
+}
+
+<link rel="stylesheet" href="~/css/components/dalil-assistant.css" asp-append-version="true" />
+
+<aside class="dalil-assistant"
+       data-dalil-widget
+       data-endpoint="@endpoint"
+       dir="rtl"
+       lang="ar"
+       aria-labelledby="dalil-title"
+       hidden>
+    <div class="dalil-assistant__backdrop" data-dalil-close></div>
+    <section class="dalil-assistant__panel" role="dialog" aria-modal="true" aria-describedby="dalil-description">
+        <header class="dalil-assistant__header">
+            <div class="dalil-assistant__identity">
+                <span class="dalil-assistant__mark" aria-hidden="true">د</span>
+                <div>
+                    <h2 id="dalil-title">دليل</h2>
+                    <p id="dalil-description">المساعد الذكي في منصة FixPal</p>
+                </div>
+            </div>
+            <button class="dalil-assistant__close" type="button" data-dalil-close aria-label="إغلاق دليل">
+                <span aria-hidden="true">×</span>
+            </button>
+        </header>
+
+        <div class="dalil-assistant__messages" data-dalil-messages role="log" aria-live="polite" aria-relevant="additions">
+            <div class="dalil-assistant__intro" data-dalil-intro>
+                <strong>دليل — المساعد الذكي في منصة FixPal</strong>
+                <p>صف مشكلة الصيانة وموقعك، وسأساعدك في فهمها والعثور على مزودين مطابقين من صلّحلي.</p>
+                <small>الإرشاد لا يغني عن تقييم مختص، ولا يُستخدم بدل جهات الطوارئ.</small>
+            </div>
+        </div>
+
+        <div class="dalil-assistant__status" data-dalil-status aria-live="assertive"></div>
+        <div class="dalil-assistant__typing" data-dalil-typing hidden aria-label="دليل يكتب الآن">
+            <span></span><span></span><span></span>
+        </div>
+
+        <form class="dalil-assistant__composer" data-dalil-form>
+            @Html.AntiForgeryToken()
+            <label class="visually-hidden" for="dalil-message">اكتب رسالة إلى دليل</label>
+            <textarea id="dalil-message"
+                      data-dalil-input
+                      rows="1"
+                      maxlength="2000"
+                      placeholder="اكتب وصف المشكلة..."
+                      autocomplete="off"
+                      enterkeyhint="send"
+                      required></textarea>
+            <button type="submit" data-dalil-send>
+                <span>إرسال</span>
+                <span aria-hidden="true">←</span>
+            </button>
+        </form>
+    </section>
+</aside>
+
+<script src="~/js/dalil-assistant.js" asp-append-version="true" defer></script>

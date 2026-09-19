@@ -33,6 +33,13 @@
                         <li class="nav-item"><a class="nav-link fp-nav-link" asp-area="" asp-controller="Home" asp-action="Index" asp-fragment="how-it-works">كيف يعمل صلّحلي؟</a></li>
                     }
                 </ul>
+                <button type="button"
+        class="btn btn-outline-primary d-inline-flex align-items-center justify-content-center me-xl-2 mb-3 mb-xl-0"
+            onclick="window.DalilAssistant?.open()"
+                        aria-label="فتح مساعد دليل"
+                     title="دليل">
+                    <i class="bi bi-chat-dots" aria-hidden="true"></i>
+                </button>
                 <partial name="_LoginPartial" />
             </div>
         </div>
