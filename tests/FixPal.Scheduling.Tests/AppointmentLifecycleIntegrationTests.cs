@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Text.Json;
 using FixPal.Controllers;
 using FixPal.Data;
 using FixPal.Infrastructure.Identity;
@@ -333,6 +334,30 @@ public sealed class AppointmentLifecycleIntegrationTests(SqlSchedulingFixture fi
         Assert.Single(panel.PendingProposals);
         Assert.True(panel.PendingProposals[0].CanConfirm);
         Assert.False(panel.PendingProposals[0].CreatedByCurrentUser);
+    }
+
+    [SqlServerFact]
+    public async Task CustomerCalendarPreviewShowsOtherBookingOnlyAsBusyTime()
+    {
+        fixture.RequireLocalDb();
+        await using var first = await fixture.CreateScenarioAsync();
+        await first.CreateConfirmedAsync(10, 11);
+        await using var second = await fixture.CreateScenarioAsync(
+            existingProviderId: first.ProviderProfileId, providerUserId: first.ProviderId);
+
+        var panel = await second.CustomerService.GetForRequestAsync(second.Customer, second.RequestId, default);
+        var monday = Assert.Single(panel!.CalendarPreview!.Days, day => day.Date == new DateOnly(2030, 1, 7));
+        Assert.False(Assert.Single(monday.Slots, slot => slot.StartLocal.Hour == 10).IsAvailable);
+        Assert.True(Assert.Single(monday.Slots, slot => slot.StartLocal.Hour == 11).IsAvailable);
+
+        var previewJson = JsonSerializer.Serialize(panel.CalendarPreview);
+        Assert.DoesNotContain(first.CustomerId, previewJson, StringComparison.Ordinal);
+        Assert.DoesNotContain("MaintenanceRequest", previewJson, StringComparison.Ordinal);
+        Assert.Equal(["StartLocal", "EndLocal", "IsAvailable"],
+            typeof(CustomerCalendarSlot).GetProperties().Select(property => property.Name));
+        var providerPanel = await second.ProviderService.GetForRequestAsync(second.Provider, second.RequestId, default);
+        Assert.Null(providerPanel!.CalendarPreview);
+        Assert.Null(await second.CustomerService.GetForRequestAsync(second.Unrelated, second.RequestId, default));
     }
 
     [SqlServerFact]

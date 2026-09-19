@@ -717,7 +717,7 @@ public sealed class DalilAssistantTests
         Assert.DoesNotContain("x-goog-api-key", script, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("innerHTML", script, StringComparison.Ordinal);
         Assert.Contains("textContent", script, StringComparison.Ordinal);
-        Assert.Contains("دليل — المساعد الذكي في منصة FixPal", view, StringComparison.Ordinal);
+        Assert.Contains("دليل — المساعد الذكي في منصة تصليحة", view, StringComparison.Ordinal);
         Assert.Contains("@media (max-width: 575.98px)", css, StringComparison.Ordinal);
         Assert.Contains("height: 100dvh", css, StringComparison.Ordinal);
         Assert.Contains("[data-dalil-widget]", script, StringComparison.Ordinal);

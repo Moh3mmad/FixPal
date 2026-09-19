@@ -20,7 +20,7 @@ public class DiagnosisOptions
 }
 public static class DiagnosisSafety
 {
-    public const string Escalation = "ابتعد عن مصدر الخطر ولا تحاول التدخل. تواصل مع مختص مؤهل، وعند وجود خطر فوري استخدم قناة الطوارئ الرسمية المحلية. FixPal لم يتواصل مع أي جهة نيابة عنك.";
+    public const string Escalation = "ابتعد عن مصدر الخطر ولا تحاول التدخل. تواصل مع مختص مؤهل، وعند وجود خطر فوري استخدم قناة الطوارئ الرسمية المحلية. تصليحة لم تتواصل مع أي جهة نيابة عنك.";
     // Conservative text guard complements the model; absence of a keyword does not establish safety.
     public static bool HasHazard(string description) => new[] { "غاز", "حريق", "دخان", "شرر", "مكشوف", "انهيار", "صعق", "gas", "fire", "smoke", "spark", "exposed wire", "collapse", "electric shock" }
         .Any(word => description.Contains(word, StringComparison.OrdinalIgnoreCase));
